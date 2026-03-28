@@ -280,38 +280,47 @@ class CommitGenerator {
   }
 
   buildPrompt(files, diff) {
-    return `
-    You are a senior software engineer.
+  return `
+    You are a senior engineer generating production-grade git commits.
 
-    Write EXACTLY ONE git commit message.
+    Think internally, evaluate multiple options, and output only the best result.
 
-    STRICT RULES:
-    - Use Conventional Commits
-    - Output plain text only
-    - NO markdown
-    - NO code blocks
-    - NO explanations
-    - Use imperative mood
-    - Be concise and technical
-    - Max 72 chars for summary
+    STRICT:
+    - Exactly one commit message
+    - Plain text only
+    - No markdown, no code blocks, no explanations
+    - Conventional Commits
+    - Imperative mood
+    - Summary <= 72 chars
+    - No generic wording
 
-    FORMAT:
+    STRUCTURE:
 
-    type(scope): short summary
+    type(scope): concise summary
 
-    - specific change
-    - reason for change
-    - impact
+    - concrete change
+    - motivation
+    - technical impact
+
+    INTELLIGENCE:
+    - Infer type from change intent
+    - Infer scope from file paths
+    - Prioritize meaningful changes over noise
+    - Ignore trivial formatting changes
+
+    STYLE:
+    - Use precise technical verbs (extract, isolate, validate, remove, replace)
+    - Avoid vague words (update, improve, change)
 
     CONTEXT:
 
-    Files:
+    FILES:
     ${files}
 
-    Diff:
+    DIFF:
     ${diff}
 
-    ${this.extraInstruction ? `REFINE INSTRUCTION:\n${this.extraInstruction}` : ""}
+    ${this.extraInstruction ? `REFINE:\n${this.extraInstruction}` : ""}
     `;
   }
 
