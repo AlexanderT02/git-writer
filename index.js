@@ -90,7 +90,7 @@ class GitService {
   commit(message) {
     execSync("git commit -F -", {
       input: message,
-      stdio: ["pipe", "inherit", "inherit"]
+      stdio: ["pipe", "ignore", "ignore"]
     });
   }
 }
