@@ -395,7 +395,7 @@ class App {
         if (stats) {
           console.log(
             chalk.green(
-              `\n✔ Commit created  ` +
+              `\n✔  Commit created  ` +
               chalk.dim("(") +
               `${chalk.cyan(stats.files)} files  ` +
               `${chalk.green("+" + stats.insertions)}  ` +
@@ -404,7 +404,7 @@ class App {
             )
           );
         } else {
-          console.log(chalk.green("\n✔ Commit created\n"));
+          console.log(chalk.green("\n✔  Commit created\n"));
         }
 
         process.exit(0);
