@@ -46,14 +46,16 @@ if (issues.length === 0) {
 
 async function ensureStaged() {
   const branch = execSync("git rev-parse --abbrev-ref HEAD")
-    .toString()
-    .trim();
+  .toString()
+  .trim();
 
-  console.log(chalk.gray(`\n  Branch: ${branch}`));
+  const isMain = ["main", "develop"].includes(branch);
 
-  if (["main", "develop"].includes(branch)) {
-    console.log(chalk.yellow("  ⚠ Committing directly to main branch\n"));
-  }
+  console.log(
+    isMain
+      ? chalk.yellow(`\n  ⚠  Branch: ${branch}`)
+      : chalk.green(`\n  ✔  Branch: ${branch}`)
+  );
 
   const { files } = getGitContext();
   const hasStaged = !!files.trim();
