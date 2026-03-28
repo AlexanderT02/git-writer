@@ -56,7 +56,7 @@ async function ensureStaged() {
     console.log("No unstaged files");
   }
 
-  console.log("\n[a] all   [p] patch   [m] more   [c] continue   [q] cancel");
+  console.log("\n[a] all   [p] patch   [c] continue   [q] cancel");
 
   return new Promise((resolve) => {
     rl.question("› ", (answer) => {
@@ -86,7 +86,7 @@ async function ensureStaged() {
         return resolve(true);
       }
 
-      // Zahlen-Auswahl
+    
       const indexes = input
         .split(",")
         .map(n => parseInt(n.trim(), 10) - 1)
