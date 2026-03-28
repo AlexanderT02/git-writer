@@ -3,7 +3,11 @@ import { execSync, spawnSync } from "child_process";
 import chalk from "chalk";
 import ora from "ora";
 import inquirer from "inquirer";
-import fetch from "node-fetch";
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
 const apiKey = process.env.OPENAI_API_KEY;
 
@@ -11,7 +15,6 @@ if (!apiKey) {
   console.log(chalk.red.bold("\n✖ OPENAI_API_KEY not set\n"));
   process.exit(1);
 }
-
 
 function getGitContext() {
   const files = execSync("git diff --cached --name-only").toString();
@@ -24,7 +27,6 @@ function getGitContext() {
 
   return { files, diff };
 }
-
 
 const cliIssues = process.argv
   .slice(2)
@@ -43,11 +45,10 @@ if (issues.length === 0) {
   } catch {}
 }
 
-
 async function ensureStaged() {
   const branch = execSync("git rev-parse --abbrev-ref HEAD")
-  .toString()
-  .trim();
+    .toString()
+    .trim();
 
   const isMain = ["main", "develop"].includes(branch);
 
@@ -73,7 +74,9 @@ async function ensureStaged() {
     .map(line => {
       const xy = line.slice(0, 2);
       const rest = line.slice(2).trimStart();
-      const file = rest.includes(" -> ") ? rest.split(" -> ").pop().trim() : rest;
+      const file = rest.includes(" -> ")
+        ? rest.split(" -> ").pop().trim()
+        : rest;
       const status = xy[1] !== " " ? xy[1] : xy[0];
       return { status, file };
     });
@@ -88,7 +91,7 @@ async function ensureStaged() {
 
   const choices = [
     ...(hasStaged
-      ? [{name: chalk.gray("   → Use already staged files"), value: "__SKIP__"}]
+      ? [{ name: chalk.gray("   → Use already staged files"), value: "__SKIP__" }]
       : []),
     ...changedFiles.map(({ status, file }) => ({
       name: `  ${statusLabel(status).padEnd(12)} ${file}`,
@@ -127,52 +130,45 @@ async function ensureStaged() {
   });
 
   console.log(
-    chalk.green(`\n  ✔ ${selected.length} file${selected.length > 1 ? "s" : ""} staged\n`)
+    chalk.green(
+      `\n  ✔ ${selected.length} file${selected.length > 1 ? "s" : ""} staged\n`
+    )
   );
 
   return true;
 }
 
-
 let extraInstruction = "";
 
 async function generate(safeFiles, safeStat) {
   const basePrompt = `
-    You are a senior software engineer.
+You are a senior software engineer.
 
-    Write EXACTLY ONE high-quality git commit message.
+Write EXACTLY ONE high-quality git commit message.
 
-    STRICT RULES:
-    - Use Conventional Commits format
-    - Be precise, technical, and concise
-    - No fluff, no generic wording
-    - No explanations outside the commit message
-    - No multiple commits
+STRICT RULES:
+- Use Conventional Commits format
+- Be precise, technical, and concise
+- No fluff, no generic wording
+- No explanations outside the commit message
+- No multiple commits
 
-    FORMAT:
+FORMAT:
 
-    type(scope): short summary in imperative mood
+type(scope): short summary in imperative mood
 
-    - what changed (technical, specific)
-    - why it was changed (reason / problem)
-    - impact (behavior, performance, UX, or bug fix)
+- what changed
+- why it was changed
+- impact
 
-    GUIDELINES:
-    - Use verbs like: add, fix, refactor, optimize, remove
-    - Avoid vague words like "improve", "update", "stuff"
-    - Mention key logic changes (e.g. "aggregate by date", "skip weekends")
-    - Keep summary ≤ 72 chars
-    - Bullet points: max 3 lines
-    - No emojis
+CONTEXT:
 
-    CONTEXT:
+Files:
+${safeFiles}
 
-    Files:
-    ${safeFiles}
-
-    Diff:
-    ${safeStat}
-    `;
+Diff:
+${safeStat}
+`;
 
   const finalPrompt =
     basePrompt + (extraInstruction ? `\n\nRefine:\n${extraInstruction}` : "");
@@ -182,38 +178,32 @@ async function generate(safeFiles, safeStat) {
     color: "cyan"
   }).start();
 
-  const res = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      input: finalPrompt
-    })
+  const stream = await client.responses.stream({
+    model: "gpt-4o-mini",
+    input: finalPrompt
   });
 
-  if (!res.ok) {
-    spinner.fail(chalk.red("API request failed"));
-    console.error(chalk.red(await res.text()));
-    process.exit(1);
+  spinner.stop();
+
+  let fullText = "";
+
+  render("");
+
+  for await (const event of stream) {
+    if (event.type === "response.output_text.delta") {
+      fullText += event.delta;
+      render(fullText);
+    }
   }
 
-  const json = await res.json();
-  const msg = json.output?.[0]?.content?.[0]?.text;
-
-  spinner.succeed(chalk.green("Done"));
-
-  return msg
+  return fullText
     .replace(/```[a-z]*\n?/gi, "")
     .replace(/```/g, "")
     .trim();
 }
 
-
 function render(msg) {
-  console.clear();
+  process.stdout.write("\x1Bc");
 
   const border = chalk.dim("─".repeat(50));
   console.log("\n" + border);
@@ -223,7 +213,9 @@ function render(msg) {
   console.log("  " + msg);
 
   console.log("\n" + border);
-  console.log("  [Enter] commit   [r] regenerate   [r:<text>] refine   [n] cancel");
+  console.log(
+    "  [Enter] commit   [r] regenerate   [r:<text>] refine   [n] cancel"
+  );
   console.log(border + "\n");
 }
 
@@ -236,8 +228,6 @@ async function loop() {
     const msgBase = await generate(files, diff);
     const refs = issues.length ? `\n\nRefs ${issues.join(", ")}` : "";
     const msg = msgBase + refs;
-
-    render(msg);
 
     const { input } = await inquirer.prompt([
       {
