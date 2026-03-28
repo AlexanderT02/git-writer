@@ -193,10 +193,11 @@ ${safeStat}
   }
 
   const cleaned = msg
-    .replace(/```/g, "")
-    .replace(/^git\s*/i, "")
-    .replace(/^\s*\n/, "")
-    .trim();
+  .replace(/```[a-z]*\n?/gi, "")   
+  .replace(/```/g, "")         
+  .replace(/^(git|plaintext|text)\s*/i, "") 
+  .replace(/^\s*\n/, "")
+  .trim();
 
   return cleaned;
 }
