@@ -5,263 +5,261 @@ import ora from "ora";
 import inquirer from "inquirer";
 import OpenAI from "openai";
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
 
-const apiKey = process.env.OPENAI_API_KEY;
+class OpenAIClient {
+  constructor() {
+    if (!process.env.OPENAI_API_KEY) {
+      console.log(chalk.red.bold("\n✖ OPENAI_API_KEY not set\n"));
+      process.exit(1);
+    }
 
-if (!apiKey) {
-  console.log(chalk.red.bold("\n✖ OPENAI_API_KEY not set\n"));
-  process.exit(1);
-}
-
-function getGitContext() {
-  const files = execSync("git diff --cached --name-only").toString();
-  let diff = execSync("git diff --cached").toString();
-
-  if (diff.split("\n").length > 800) {
-    console.log(chalk.yellow("⚠  Large diff — using summary mode\n"));
-    diff = execSync("git diff --cached --stat").toString();
+    this.client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    });
   }
 
-  return { files, diff };
-}
-
-const cliIssues = process.argv
-  .slice(2)
-  .flatMap(a => a.split(","))
-  .map(a => a.trim().match(/^#?(\d+)$/)?.[1])
-  .filter(Boolean)
-  .map(n => `#${n}`);
-
-let issues = cliIssues;
-
-if (issues.length === 0) {
-  try {
-    const branch = execSync("git rev-parse --abbrev-ref HEAD").toString();
-    const match = branch.match(/\d+/);
-    if (match) issues = [`#${match[0]}`];
-  } catch {}
-}
-
-async function ensureStaged() {
-  const branch = execSync("git rev-parse --abbrev-ref HEAD")
-    .toString()
-    .trim();
-
-  const isMain = ["main", "develop"].includes(branch);
-
-  console.log(
-    isMain
-      ? chalk.yellow(`\n  ⚠  Branch: ${branch}`)
-      : chalk.green(`\n  ✔  Branch: ${branch}`)
-  );
-
-  const { files } = getGitContext();
-  const hasStaged = !!files.trim();
-
-  const status = execSync("git status --porcelain").toString().trim();
-
-  if (!status && !hasStaged) {
-    console.log(chalk.gray("\nWorking tree clean\n"));
-    process.exit(0);
-  }
-
-  const changedFiles = status
-    .split("\n")
-    .filter(Boolean)
-    .map(line => {
-      const xy = line.slice(0, 2);
-      const rest = line.slice(2).trimStart();
-      const file = rest.includes(" -> ")
-        ? rest.split(" -> ").pop().trim()
-        : rest;
-      const status = xy[1] !== " " ? xy[1] : xy[0];
-      return { status, file };
+  async streamCompletion(prompt, onToken) {
+    const stream = await this.client.responses.stream({
+      model: "gpt-4o-mini",
+      input: prompt
     });
 
-  const statusLabel = s => {
-    if (s === "M") return chalk.yellow("modified ");
-    if (s === "A") return chalk.green("new file ");
-    if (s === "D") return chalk.red("deleted  ");
-    if (s === "?") return chalk.gray("untracked");
-    return chalk.gray(s.padEnd(9));
-  };
+    let fullText = "";
 
-  const choices = [
-    ...(hasStaged
-      ? [{ name: chalk.gray("   → Use already staged files"), value: "__SKIP__" }]
-      : []),
-    ...changedFiles.map(({ status, file }) => ({
-      name: `  ${statusLabel(status).padEnd(12)} ${file}`,
-      value: file
-    }))
-  ];
-
-  if (choices.length === 0) {
-    if (hasStaged) return true;
-    console.log(chalk.gray("  Nothing to stage\n"));
-    return false;
-  }
-
-  console.log(chalk.bold("\n  Stage files\n"));
-
-  const { selected } = await inquirer.prompt([
-    {
-      type: "checkbox",
-      name: "selected",
-      message: "Pick files to stage",
-      choices,
-      pageSize: 12
+    for await (const event of stream) {
+      if (event.type === "response.output_text.delta") {
+        fullText += event.delta;
+        onToken(fullText);
+      }
     }
-  ]);
 
-  if (selected.includes("__SKIP__")) return true;
-
-  if (selected.length === 0) {
-    if (hasStaged) return true;
-    console.log(chalk.red("\n  Nothing staged — aborting\n"));
-    process.exit(0);
+    return fullText.trim();
   }
-
-  spawnSync("git", ["add", "--", ...selected], {
-    stdio: "inherit"
-  });
-
-  console.log(
-    chalk.green(
-      `\n  ✔ ${selected.length} file${selected.length > 1 ? "s" : ""} staged\n`
-    )
-  );
-
-  return true;
 }
 
-let extraInstruction = "";
+class GitService {
+  getBranch() {
+    return execSync("git rev-parse --abbrev-ref HEAD").toString().trim();
+  }
 
-async function generate(safeFiles, safeStat) {
-  const basePrompt = `
-You are a senior software engineer.
+  getStatus() {
+    return execSync("git status --porcelain").toString().trim();
+  }
 
-Write EXACTLY ONE high-quality git commit message.
+  getStagedFiles() {
+    return execSync("git diff --cached --name-only").toString();
+  }
 
-STRICT RULES:
-- Use Conventional Commits format
-- Be precise, technical, and concise
-- No fluff, no generic wording
-- No explanations outside the commit message
-- No multiple commits
+  getDiff() {
+    let diff = execSync("git diff --cached").toString();
 
-FORMAT:
-
-type(scope): short summary in imperative mood
-
-- what changed
-- why it was changed
-- impact
-
-CONTEXT:
-
-Files:
-${safeFiles}
-
-Diff:
-${safeStat}
-`;
-
-  const finalPrompt =
-    basePrompt + (extraInstruction ? `\n\nRefine:\n${extraInstruction}` : "");
-
-  const spinner = ora({
-    text: chalk.gray("Generating commit message…"),
-    color: "cyan"
-  }).start();
-
-  const stream = await client.responses.stream({
-    model: "gpt-4o-mini",
-    input: finalPrompt
-  });
-
-  spinner.stop();
-
-  let fullText = "";
-
-  render("");
-
-  for await (const event of stream) {
-    if (event.type === "response.output_text.delta") {
-      fullText += event.delta;
-      render(fullText);
+    if (diff.split("\n").length > 800) {
+      console.log(chalk.yellow("⚠ Large diff — summary mode\n"));
+      diff = execSync("git diff --cached --stat").toString();
     }
+
+    return diff;
   }
 
-  return fullText
-    .replace(/```[a-z]*\n?/gi, "")
-    .replace(/```/g, "")
-    .trim();
+  add(files) {
+    spawnSync("git", ["add", "--", ...files], { stdio: "inherit" });
+  }
+
+  commit(message) {
+    execSync("git commit -F -", {
+      input: message,
+      stdio: ["pipe", "inherit", "inherit"]
+    });
+  }
 }
 
-function render(msg) {
-  process.stdout.write("\x1Bc");
+class UI {
+  static render(msg) {
+    process.stdout.write("\x1Bc");
 
-  const border = chalk.dim("─".repeat(50));
-  console.log("\n" + border);
-  console.log(chalk.bold.white("  COMMIT MESSAGE"));
-  console.log(border + "\n");
+    const border = chalk.dim("─".repeat(50));
+    console.log("\n" + border);
+    console.log(chalk.bold.white("  COMMIT MESSAGE"));
+    console.log(border + "\n");
 
-  console.log("  " + msg);
+    console.log("  " + msg);
 
-  console.log("\n" + border);
-  console.log(
-    "  [Enter] commit   [r] regenerate   [r:<text>] refine   [n] cancel"
-  );
-  console.log(border + "\n");
-}
+    console.log("\n" + border);
+    console.log(
+      "  [Enter] commit   [r] regenerate   [r:<text>] refine   [n] cancel"
+    );
+    console.log(border + "\n");
+  }
 
-async function loop() {
-  while (true) {
-    await ensureStaged();
-
-    const { files, diff } = getGitContext();
-
-    const msgBase = await generate(files, diff);
-    const refs = issues.length ? `\n\nRefs ${issues.join(", ")}` : "";
-    const msg = msgBase + refs;
-
-    const { input } = await inquirer.prompt([
+  static async selectFiles(choices) {
+    const { selected } = await inquirer.prompt([
       {
-        type: "input",
-        name: "input",
-        message: "›"
+        type: "checkbox",
+        name: "selected",
+        message: "Pick files to stage",
+        choices,
+        pageSize: 12
       }
     ]);
 
-    const value = input.trim();
+    return selected;
+  }
 
-    if (value === "" || value === "y") {
-      execSync("git commit -F -", {
-        input: msg,
-        stdio: ["pipe", "inherit", "inherit"]
-      });
+  static async getUserInput() {
+    const { input } = await inquirer.prompt([
+      { type: "input", name: "input", message: "›" }
+    ]);
 
-      console.log(chalk.green.bold("\n✔ Committed\n"));
-      process.exit(0);
-    }
-
-    if (value.startsWith("r:")) {
-      extraInstruction = value.slice(2).trim();
-      continue;
-    }
-
-    if (value === "r") {
-      extraInstruction = "";
-      continue;
-    }
-
-    console.log(chalk.gray("\nCancelled\n"));
-    process.exit(0);
+    return input.trim();
   }
 }
 
-loop();
+
+class StagingService {
+  constructor(git) {
+    this.git = git;
+  }
+
+  parseStatus() {
+    const status = this.git.getStatus();
+    if (!status) return [];
+
+    return status.split("\n").map(line => {
+      const file = line.slice(2).trim();
+      return file;
+    });
+  }
+
+  async ensureStaged() {
+    const staged = this.git.getStagedFiles().trim();
+    const files = this.parseStatus();
+
+    if (!files.length && !staged) {
+      console.log(chalk.gray("Working tree clean\n"));
+      process.exit(0);
+    }
+
+    const choices = [
+      ...(staged ? [{ name: "→ Use staged", value: "__SKIP__" }] : []),
+      ...files.map(f => ({ name: f, value: f }))
+    ];
+
+    const selected = await UI.selectFiles(choices);
+
+    if (selected.includes("__SKIP__")) return;
+
+    if (!selected.length) {
+      console.log(chalk.red("Nothing staged — abort"));
+      process.exit(0);
+    }
+
+    this.git.add(selected);
+  }
+}
+
+
+class CommitGenerator {
+  constructor(ai) {
+    this.ai = ai;
+    this.extraInstruction = "";
+  }
+
+  buildPrompt(files, diff) {
+    return `
+    You are a senior software engineer.
+
+    Write EXACTLY ONE git commit message.
+
+    STRICT RULES:
+    - Use Conventional Commits
+    - Output plain text only
+    - NO markdown
+    - NO code blocks
+    - NO explanations
+    - Use imperative mood
+    - Be concise and technical
+    - Max 72 chars for summary
+
+    FORMAT:
+
+    type(scope): short summary
+
+    - specific change
+    - reason for change
+    - impact
+
+    CONTEXT:
+
+    Files:
+    ${files}
+
+    Diff:
+    ${diff}
+
+    ${this.extraInstruction ? `REFINE INSTRUCTION:\n${this.extraInstruction}` : ""}
+    `;
+  }
+
+  async generate(files, diff) {
+    const spinner = ora("Generating commit message...").start();
+
+    const result = await this.ai.streamCompletion(
+      this.buildPrompt(files, diff),
+      text => UI.render(text)
+    );
+
+    spinner.stop();
+
+    return result
+    .replace(/```[\s\S]*?\n/g, "") 
+    .replace(/```/g, "")
+    .replace(/^plaintext\s*/i, "")
+    .trim();
+  }
+}
+
+
+class App {
+  constructor() {
+    this.git = new GitService();
+    this.ai = new OpenAIClient();
+    this.staging = new StagingService(this.git);
+    this.generator = new CommitGenerator(this.ai);
+  }
+
+  async run() {
+    while (true) {
+      await this.staging.ensureStaged();
+
+      const files = this.git.getStagedFiles();
+      const diff = this.git.getDiff();
+
+      const message = await this.generator.generate(files, diff);
+
+      const input = await UI.getUserInput();
+
+      if (!input || input === "y") {
+        this.git.commit(message);
+        console.log(chalk.green("✔ Committed"));
+        process.exit(0);
+      }
+
+      if (input === "r") {
+        this.generator.extraInstruction = "";
+        continue;
+      }
+
+      if (input.startsWith("r:")) {
+        this.generator.extraInstruction = input.slice(2).trim();
+        continue;
+      }
+
+      console.log("Cancelled");
+      process.exit(0);
+    }
+  }
+}
+
+
+// start
+new App().run();
