@@ -34,12 +34,22 @@ const safeFiles = files.replace(/[^\x00-\x7F]/g, "");
 const safeStat = diff.replace(/[^\x00-\x7F]/g, "");
 
 
-let issue = "";
-try {
-  const branch = execSync("git rev-parse --abbrev-ref HEAD").toString();
-  const match = branch.match(/\d+/);
-  if (match) issue = `#${match[0]}`;
-} catch {}
+// CLI args: ai-commit #12 #10  or  ai-commit 12,10
+const cliIssues = process.argv.slice(2)
+  .flatMap(a => a.split(","))
+  .map(a => a.trim().match(/^#?(\d+)$/)?.[1])
+  .filter(Boolean)
+  .map(n => `#${n}`);
+
+let issues = cliIssues;
+
+if (issues.length === 0) {
+  try {
+    const branch = execSync("git rev-parse --abbrev-ref HEAD").toString();
+    const match = branch.match(/\d+/);
+    if (match) issues = [`#${match[0]}`];
+  } catch {}
+}
 
 
 const basePrompt = `
@@ -120,9 +130,9 @@ async function generate() {
   }
 
   const cleaned = msg
-  .replace(/```/g, "")        // code blocks entfernen
-  .replace(/^git\s*/i, "")    // "git" am Anfang weg
-  .replace(/^\s*\n/, "")      // leere Zeile oben
+  .replace(/```/g, "")        
+  .replace(/^git\s*/i, "")    
+  .replace(/^\s*\n/, "")     
   .trim();
 
   return cleaned;
@@ -145,7 +155,8 @@ function render(msg) {
 
 async function loop() {
   const msgBase = await generate();
-  const msg = issue ? `${msgBase}\n\nRefs ${issue}` : msgBase;
+  const refs = issues.length > 0 ? `\n\nRefs ${issues.join(", ")}` : "";
+  const msg = msgBase + refs;
 
   render(msg);
 
