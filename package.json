@@ -1,0 +1,11 @@
+{
+  "name": "ai-commit",
+  "version": "1.0.0",
+  "bin": {
+    "ai-commit": "index.js"
+  },
+  "type": "module",
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  }
+}
