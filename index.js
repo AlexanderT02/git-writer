@@ -75,42 +75,64 @@ class GitService {
 
 class UI {
   static render(msg) {
-    process.stdout.write("\x1Bc");
+    console.clear();
 
-    const border = chalk.dim("─".repeat(50));
-    console.log("\n" + border);
-    console.log(chalk.bold.white("  COMMIT MESSAGE"));
-    console.log(border + "\n");
-
-    console.log("  " + msg);
+    const border = chalk.dim("─".repeat(60));
 
     console.log("\n" + border);
-    console.log(
-      "  [Enter] commit   [r] regenerate   [r:<text>] refine   [n] cancel"
-    );
+    console.log(chalk.bold("  Generated Commit"));
     console.log(border + "\n");
+
+    console.log(msg || chalk.dim("...generating"));
+
+    console.log("\n" + border);
   }
 
-  static async selectFiles(choices) {
-    const { selected } = await inquirer.prompt([
+  static async actionMenu() {
+    const { action } = await inquirer.prompt([
       {
-        type: "checkbox",
-        name: "selected",
-        message: "Pick files to stage",
-        choices,
-        pageSize: 12
+        type: "list",
+        name: "action",
+        message: "What do you want to do?",
+        choices: [
+          { name: " Commit", value: "commit" },
+          { name: " Edit message manually", value: "edit" },
+          { name: " Regenerate", value: "regen" },
+          { name: " Refine with instruction", value: "refine" },
+          { name: " Copy to clipboard", value: "copy" },
+          new inquirer.Separator(),
+          { name: "✖ Cancel", value: "cancel" }
+        ]
       }
     ]);
 
-    return selected;
+    return action;
   }
 
-  static async getUserInput() {
-    const { input } = await inquirer.prompt([
-      { type: "input", name: "input", message: "›" }
+  static async refineInput() {
+    const { text } = await inquirer.prompt([
+      {
+        type: "input",
+        name: "text",
+        message: "Refinement instruction",
+        validate: v => v.trim() ? true : "Enter something"
+      }
     ]);
 
-    return input.trim();
+    return text.trim();
+  }
+
+  static async editMessage(initial) {
+    const { text } = await inquirer.prompt([
+      {
+        type: "editor",
+        name: "text",
+        message: "Edit commit message",
+        default: initial
+      }
+    ]);
+
+    return text.trim();
   }
 }
 
@@ -120,40 +142,133 @@ class StagingService {
     this.git = git;
   }
 
-  parseStatus() {
+  getStatusLabel(code) {
+    switch (code) {
+      case "M":
+        return chalk.yellow("● modified  ");
+      case "A":
+        return chalk.green("● added     ");
+      case "D":
+        return chalk.red("● deleted   ");
+      case "?":
+        return chalk.gray("● untracked ");
+      case "R":
+        return chalk.cyan("● renamed   ");
+      default:
+        return chalk.dim(code.padEnd(10));
+    }
+  }
+
+  parseStatusDetailed() {
     const status = this.git.getStatus();
     if (!status) return [];
 
     return status.split("\n").map(line => {
-      const file = line.slice(2).trim();
-      return file;
+      const xy = line.slice(0, 2);
+      const rest = line.slice(2).trim();
+
+      const file = rest.includes(" -> ")
+        ? rest.split(" -> ").pop().trim()
+        : rest;
+
+      const code = xy[1] !== " " ? xy[1] : xy[0];
+
+      return { file, code };
     });
+  }
+
+  printSummary(files, stagedExists) {
+    const total = files.length;
+
+    console.log(chalk.bold("\nStage changes\n"));
+
+    if (stagedExists) {
+      console.log(chalk.gray("↳ Using existing staged changes possible"));
+    }
+
+    console.log(
+      chalk.dim(`Detected ${total} changed file${total !== 1 ? "s" : ""}\n`)
+    );
+  }
+
+  buildChoices(files, stagedExists) {
+    return [
+      {
+        name: chalk.cyan.bold("✔ Stage ALL changes"),
+        value: "__ALL__"
+      },
+      ...(stagedExists
+        ? [
+            {
+              name: chalk.gray("↳ Use already staged files"),
+              value: "__SKIP__"
+            }
+          ]
+        : []),
+      new inquirer.Separator(chalk.dim("──────── Files ────────")),
+      ...files.map(f => ({
+        name: `${this.getStatusLabel(f.code)} ${f.file}`,
+        value: f.file,
+        checked: f.code !== "?" // default: tracked files selected
+      }))
+    ];
   }
 
   async ensureStaged() {
     const staged = this.git.getStagedFiles().trim();
-    const files = this.parseStatus();
+    const files = this.parseStatusDetailed();
 
     if (!files.length && !staged) {
-      console.log(chalk.gray("Working tree clean\n"));
+      console.log(chalk.gray("\n✔ Working tree clean\n"));
       process.exit(0);
     }
 
-    const choices = [
-      ...(staged ? [{ name: "→ Use staged", value: "__SKIP__" }] : []),
-      ...files.map(f => ({ name: f, value: f }))
-    ];
+    this.printSummary(files, !!staged);
 
-    const selected = await UI.selectFiles(choices);
+    const choices = this.buildChoices(files, !!staged);
 
-    if (selected.includes("__SKIP__")) return;
+    const { selected } = await inquirer.prompt([
+      {
+        type: "checkbox",
+        name: "selected",
+        message: "Select files to stage",
+        choices,
+        pageSize: 15,
+        loop: false
+      }
+    ]);
+
+    if (selected.includes("__SKIP__")) {
+      console.log(chalk.green("\n✔ Using already staged files\n"));
+      return;
+    }
+
+    if (selected.includes("__ALL__")) {
+      this.git.add(files.map(f => f.file));
+      console.log(
+        chalk.green(
+          `\n✔ Staged all ${files.length} file${
+            files.length !== 1 ? "s" : ""
+          }\n`
+        )
+      );
+      return;
+    }
 
     if (!selected.length) {
-      console.log(chalk.red("Nothing staged — abort"));
+      console.log(chalk.red("\n✖ Nothing staged — aborting\n"));
       process.exit(0);
     }
 
     this.git.add(selected);
+
+    console.log(
+      chalk.green(
+        `\n✔ Staged ${selected.length} file${
+          selected.length !== 1 ? "s" : ""
+        }\n`
+      )
+    );
   }
 }
 
@@ -228,36 +343,56 @@ class App {
   }
 
   async run() {
+  while (true) {
+    await this.staging.ensureStaged();
+
+    const files = this.git.getStagedFiles();
+    const diff = this.git.getDiff();
+
+    let message = await this.generator.generate(files, diff);
+
     while (true) {
-      await this.staging.ensureStaged();
+      UI.render(message);
 
-      const files = this.git.getStagedFiles();
-      const diff = this.git.getDiff();
+      const action = await UI.actionMenu();
 
-      const message = await this.generator.generate(files, diff);
-
-      const input = await UI.getUserInput();
-
-      if (!input || input === "y") {
+      if (action === "commit") {
         this.git.commit(message);
-        console.log(chalk.green("✔ Committed"));
+        console.log(chalk.green("\n✔ Commit created\n"));
         process.exit(0);
       }
 
-      if (input === "r") {
+      if (action === "regen") {
         this.generator.extraInstruction = "";
+        message = await this.generator.generate(files, diff);
         continue;
       }
 
-      if (input.startsWith("r:")) {
-        this.generator.extraInstruction = input.slice(2).trim();
+      if (action === "refine") {
+        const text = await UI.refineInput();
+        this.generator.extraInstruction = text;
+        message = await this.generator.generate(files, diff);
         continue;
       }
 
-      console.log("Cancelled");
+      if (action === "edit") {
+        message = await UI.editMessage(message);
+        continue;
+      }
+
+      if (action === "copy") {
+        await import("clipboardy").then(m =>
+          m.default.write(message)
+        );
+        console.log(chalk.gray("\n✔ Copied to clipboard\n"));
+        continue;
+      }
+
+      console.log(chalk.gray("\nCancelled\n"));
       process.exit(0);
     }
   }
+}
 }
 
 
