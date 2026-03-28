@@ -46,6 +46,28 @@ class GitService {
     return execSync("git status --porcelain").toString().trim();
   }
 
+  getLastCommitSummary() {
+    try {
+      const output = execSync("git show --shortstat -1")
+        .toString()
+        .trim();
+
+      const match = output.match(
+        /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/
+      );
+
+      if (!match) return null;
+
+      return {
+        files: match[1],
+        insertions: match[2] || 0,
+        deletions: match[3] || 0
+      };
+    } catch {
+      return null;
+    }
+  }
+
   getStagedFiles() {
     return execSync("git diff --cached --name-only").toString();
   }
@@ -368,6 +390,17 @@ class App {
       if (action === "commit") {
         this.git.commit(message);
         console.log(chalk.green("\n✔ Commit created\n"));
+
+        const stats = this.git.getLastCommitSummary();
+
+        if (stats) {
+          console.log(chalk.bold("Summary:"));
+          console.log(
+            `  Files changed: ${chalk.cyan(stats.files)}\n` +
+            `  Insertions:    ${chalk.green("+" + stats.insertions)}\n` +
+            `  Deletions:     ${chalk.red("-" + stats.deletions)}\n`
+          );
+        }
         process.exit(0);
       }
 
