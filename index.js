@@ -82,7 +82,7 @@ async function ensureStaged() {
       ? [{ name: chalk.gray("→ Use already staged files"), value: "__SKIP__" }]
       : []),
     ...changedFiles.map(({ status, file }) => ({
-      name: `${statusLabel(status)}  ${file}`,
+      name: `  ${statusLabel(status).padEnd(12)} ${file}`,
       value: file
     }))
   ];
