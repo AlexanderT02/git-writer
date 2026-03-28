@@ -3,6 +3,11 @@
 import { execSync } from "child_process";
 import readline from "readline";
 
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
+
 const apiKey = process.env.OPENAI_API_KEY;
 
 if (!apiKey) {
@@ -10,31 +15,96 @@ if (!apiKey) {
   process.exit(1);
 }
 
+function getGitContext() {
+  const files = execSync("git diff --cached --name-only").toString();
 
-const files = execSync("git diff --cached --name-only").toString();
-const MAX_LINES = 800;
+  let diff = execSync("git diff --cached").toString();
 
-let diff = execSync("git diff --cached").toString();
+  const MAX_LINES = 800;
 
-const lines = diff.split("\n");
+  if (diff.split("\n").length > MAX_LINES) {
+    console.log("⚠️ large diff, using summary mode\n");
+    diff = execSync("git diff --cached --stat").toString();
+  }
 
-if (lines.length > MAX_LINES) {
-  console.log("⚠️ large diff, using summary mode\n");
-
-  diff = execSync("git diff --cached --stat").toString();
+  return { files, diff };
 }
 
-if (!files.trim()) {
-  console.log("No staged changes");
-  process.exit(0);
+async function ensureStaged() {
+  const { files } = getGitContext();
+
+  if (files.trim()) return true;
+
+  console.log("No staged changes.\n");
+
+  const status = execSync("git status --porcelain").toString().trim();
+
+  if (!status) {
+    console.log("Working tree clean");
+    process.exit(0);
+  }
+
+  const changedFiles = status
+    .split("\n")
+    .map(line => line.slice(2).trim())
+    .filter(Boolean);
+
+  console.log("Select files to stage:\n");
+
+  changedFiles.forEach((file, i) => {
+    console.log(`[${i + 1}] ${file}`);
+  });
+
+  console.log("\n[a] all   [p] patch   [q] cancel");
+
+  return new Promise((resolve) => {
+    rl.question("› ", (answer) => {
+      const input = answer.trim();
+
+      if (input === "q") {
+        console.log("\nCancelled\n");
+        process.exit(0);
+      }
+
+      if (input === "a") {
+        execSync("git add .", { stdio: "inherit" });
+        console.log("\n✔ All files staged\n");
+        return resolve(true);
+      }
+
+      if (input === "p") {
+        execSync("git add -p", { stdio: "inherit" });
+        return resolve(true);
+      }
+
+      const indexes = input
+        .split(",")
+        .map(n => parseInt(n.trim(), 10) - 1)
+        .filter(i => i >= 0 && i < changedFiles.length);
+
+      if (indexes.length === 0) {
+        console.log("Invalid selection\n");
+        return resolve(false);
+      }
+
+      const selectedFiles = indexes.map(i => changedFiles[i]);
+
+      try {
+        execSync("git add -- " + selectedFiles.join(" "), {
+          stdio: "inherit"
+        });
+      } catch {
+        console.log("\nFailed to add files\n");
+        return resolve(false);
+      }
+
+      console.log("\n✔ Selected files staged\n");
+
+      resolve(true);
+    });
+  });
 }
 
-
-const safeFiles = files.replace(/[^\x00-\x7F]/g, "");
-const safeStat = diff.replace(/[^\x00-\x7F]/g, "");
-
-
-// CLI args: ai-commit #12 #10  or  ai-commit 12,10
 const cliIssues = process.argv.slice(2)
   .flatMap(a => a.split(","))
   .map(a => a.trim().match(/^#?(\d+)$/)?.[1])
@@ -51,8 +121,10 @@ if (issues.length === 0) {
   } catch {}
 }
 
+let extraInstruction = "";
 
-const basePrompt = `
+async function generate(safeFiles, safeStat) {
+  const basePrompt = `
 Write a realistic git commit message like a senior developer.
 
 IMPORTANT:
@@ -87,15 +159,6 @@ Diff:
 ${safeStat}
 `;
 
-let extraInstruction = "";
-
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
-
-
-async function generate() {
   const finalPrompt =
     basePrompt +
     (extraInstruction ? `\n\nRefine:\n${extraInstruction}` : "");
@@ -130,10 +193,10 @@ async function generate() {
   }
 
   const cleaned = msg
-  .replace(/```/g, "")        
-  .replace(/^git\s*/i, "")    
-  .replace(/^\s*\n/, "")     
-  .trim();
+    .replace(/```/g, "")
+    .replace(/^git\s*/i, "")
+    .replace(/^\s*\n/, "")
+    .trim();
 
   return cleaned;
 }
@@ -152,9 +215,20 @@ function render(msg) {
   console.log("────────────────────────────────────────────\n");
 }
 
-
 async function loop() {
-  const msgBase = await generate();
+  const ok = await ensureStaged();
+
+  if (!ok) {
+    return loop();
+  }
+
+  const { files, diff } = getGitContext();
+
+  const safeFiles = files.replace(/[^\x00-\x7F]/g, "");
+  const safeStat = diff.replace(/[^\x00-\x7F]/g, "");
+
+  const msgBase = await generate(safeFiles, safeStat);
+
   const refs = issues.length > 0 ? `\n\nRefs ${issues.join(", ")}` : "";
   const msg = msgBase + refs;
 
@@ -163,7 +237,6 @@ async function loop() {
   rl.question("› ", (answer) => {
     const input = answer.trim();
 
-    // default = commit
     if (input === "" || input === "y") {
       execSync("git commit -F -", {
         input: msg,
@@ -190,6 +263,5 @@ async function loop() {
     }
   });
 }
-
 
 loop();
