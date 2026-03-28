@@ -12,7 +12,6 @@ if (!apiKey) {
   process.exit(1);
 }
 
-// ─── Git helpers ─────────────────────────────────────────────────────────────
 
 function getGitContext() {
   const files = execSync("git diff --cached --name-only").toString();
@@ -26,7 +25,6 @@ function getGitContext() {
   return { files, diff };
 }
 
-// ─── Issue refs ─────────────────────────────────────────────────────────────
 
 const cliIssues = process.argv
   .slice(2)
@@ -45,7 +43,6 @@ if (issues.length === 0) {
   } catch {}
 }
 
-// ─── File selection ─────────────────────────────────────────────────────────
 
 async function ensureStaged() {
   const { files } = getGitContext();
@@ -124,7 +121,6 @@ async function ensureStaged() {
   return true;
 }
 
-// ─── Generate ───────────────────────────────────────────────────────────────
 
 let extraInstruction = "";
 
@@ -187,7 +183,6 @@ ${safeStat}
     .trim();
 }
 
-// ─── Render ─────────────────────────────────────────────────────────────────
 
 function render(msg) {
   console.clear();
@@ -203,8 +198,6 @@ function render(msg) {
   console.log("  [Enter] commit   [r] regenerate   [r:<text>] refine   [n] cancel");
   console.log(border + "\n");
 }
-
-// ─── Main loop ──────────────────────────────────────────────────────────────
 
 async function loop() {
   while (true) {
