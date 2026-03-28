@@ -126,25 +126,41 @@ let extraInstruction = "";
 
 async function generate(safeFiles, safeStat) {
   const basePrompt = `
-Write EXACTLY ONE git commit message.
+    You are a senior software engineer.
 
-IMPORTANT:
-- Only ONE commit
-- No multiple commits
+    Write EXACTLY ONE high-quality git commit message.
 
-Format:
+    STRICT RULES:
+    - Use Conventional Commits format
+    - Be precise, technical, and concise
+    - No fluff, no generic wording
+    - No explanations outside the commit message
+    - No multiple commits
 
-type(scope): summary
+    FORMAT:
 
-- change
-- impact
+    type(scope): short summary in imperative mood
 
-Files:
-${safeFiles}
+    - what changed (technical, specific)
+    - why it was changed (reason / problem)
+    - impact (behavior, performance, UX, or bug fix)
 
-Diff:
-${safeStat}
-`;
+    GUIDELINES:
+    - Use verbs like: add, fix, refactor, optimize, remove
+    - Avoid vague words like "improve", "update", "stuff"
+    - Mention key logic changes (e.g. "aggregate by date", "skip weekends")
+    - Keep summary ≤ 72 chars
+    - Bullet points: max 3 lines
+    - No emojis
+
+    CONTEXT:
+
+    Files:
+    ${safeFiles}
+
+    Diff:
+    ${safeStat}
+    `;
 
   const finalPrompt =
     basePrompt + (extraInstruction ? `\n\nRefine:\n${extraInstruction}` : "");
