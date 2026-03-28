@@ -13,7 +13,17 @@ if (!apiKey) {
 
 
 const files = execSync("git diff --cached --name-only").toString();
-const diffStat = execSync("git diff --cached").toString();
+const MAX_LINES = 800;
+
+let diff = execSync("git diff --cached").toString();
+
+const lines = diff.split("\n");
+
+if (lines.length > MAX_LINES) {
+  console.log("⚠️ large diff, using summary mode\n");
+
+  diff = execSync("git diff --cached --stat").toString();
+}
 
 if (!files.trim()) {
   console.log("No staged changes");
@@ -22,7 +32,7 @@ if (!files.trim()) {
 
 
 const safeFiles = files.replace(/[^\x00-\x7F]/g, "");
-const safeStat = diffStat.replace(/[^\x00-\x7F]/g, "");
+const safeStat = diff.replace(/[^\x00-\x7F]/g, "");
 
 
 let issue = "";
@@ -37,7 +47,6 @@ const basePrompt = `
 Write a realistic git commit message like a senior developer.
 
 IMPORTANT:
-- Do NOT sound like AI
 - Avoid generic phrases like "improve", "enhance", "update"
 - Be specific and concrete
 - Slightly informal is OK
