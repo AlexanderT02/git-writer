@@ -389,18 +389,24 @@ class App {
 
       if (action === "commit") {
         this.git.commit(message);
-        console.log(chalk.green("\n✔ Commit created\n"));
 
         const stats = this.git.getLastCommitSummary();
 
         if (stats) {
-          console.log(chalk.bold("Summary:"));
           console.log(
-            `  Files changed: ${chalk.cyan(stats.files)}\n` +
-            `  Insertions:    ${chalk.green("+" + stats.insertions)}\n` +
-            `  Deletions:     ${chalk.red("-" + stats.deletions)}\n`
+            chalk.green(
+              `\n✔ Commit created  ` +
+              chalk.dim("(") +
+              `${chalk.cyan(stats.files)} files  ` +
+              `${chalk.green("+" + stats.insertions)}  ` +
+              `${chalk.red("-" + stats.deletions)}` +
+              chalk.dim(")")
+            )
           );
+        } else {
+          console.log(chalk.green("\n✔ Commit created\n"));
         }
+
         process.exit(0);
       }
 
