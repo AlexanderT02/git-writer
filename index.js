@@ -32,14 +32,11 @@ function getGitContext() {
 
 async function ensureStaged() {
   const { files } = getGitContext();
-
-  if (files.trim()) return true;
-
-  console.log("No staged changes.\n");
+  const hasStaged = !!files.trim();
 
   const status = execSync("git status --porcelain").toString().trim();
 
-  if (!status) {
+  if (!status && !hasStaged) {
     console.log("Working tree clean");
     process.exit(0);
   }
@@ -49,13 +46,17 @@ async function ensureStaged() {
     .map(line => line.slice(2).trim())
     .filter(Boolean);
 
-  console.log("Select files to stage:\n");
+  console.log("\nSelect files:\n");
 
-  changedFiles.forEach((file, i) => {
-    console.log(`[${i + 1}] ${file}`);
-  });
+  if (changedFiles.length > 0) {
+    changedFiles.forEach((file, i) => {
+      console.log(`[${i + 1}] ${file}`);
+    });
+  } else {
+    console.log("No unstaged files");
+  }
 
-  console.log("\n[a] all   [p] patch   [q] cancel");
+  console.log("\n[a] all   [p] patch   [m] more   [c] continue   [q] cancel");
 
   return new Promise((resolve) => {
     rl.question("› ", (answer) => {
@@ -64,6 +65,14 @@ async function ensureStaged() {
       if (input === "q") {
         console.log("\nCancelled\n");
         process.exit(0);
+      }
+
+      if (input === "c") {
+        if (!hasStaged) {
+          console.log("Nothing staged yet\n");
+          return resolve(false);
+        }
+        return resolve(true);
       }
 
       if (input === "a") {
@@ -77,6 +86,7 @@ async function ensureStaged() {
         return resolve(true);
       }
 
+      // Zahlen-Auswahl
       const indexes = input
         .split(",")
         .map(n => parseInt(n.trim(), 10) - 1)
@@ -98,7 +108,7 @@ async function ensureStaged() {
         return resolve(false);
       }
 
-      console.log("\n✔ Selected files staged\n");
+      console.log("\n✔ Files added\n");
 
       resolve(true);
     });
