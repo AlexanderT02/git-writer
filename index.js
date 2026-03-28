@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import fetch from "node-fetch";
 import { execSync } from "child_process";
 import readline from "readline";
 
