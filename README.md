@@ -26,6 +26,8 @@ Restart your terminal afterwards.
 npm install
 ```
 
+This installs: `chalk` (colors), `ora` (spinner), `inquirer` (interactive prompts).
+
 ---
 
 3. Link the CLI globally:
@@ -42,28 +44,22 @@ npm link
 aic
 ```
 
-The tool starts interactively and lists all changed files, letting you choose what to stage before generating a message.
+The tool starts interactively, shows all changed files as a checkbox list, and lets you pick what to stage before generating a message.
 
 ---
 
 ## File Selection
 
-```text
-Select files:
+Use arrow keys and space to select files, then press Enter to confirm:
 
-[1] src/index.js
-[2] README.md
-
-[a] all   [p] patch   [c] continue   [q] cancel
+```
+? Pick files to stage
+❯ ◯ modified   src/index.js
+  ◯ new file   src/utils.js
+  ◯ untracked  .env.example
 ```
 
-| Input  | Action |
-|--------|--------|
-| `1,2`  | Stage specific files by number (comma-separated) |
-| `a`    | Stage all files (`git add .`) |
-| `p`    | Interactive patch staging (`git add -p`) |
-| `c`    | Continue with already staged files |
-| `q`    | Cancel |
+If files are already staged, you can skip selection by pressing Enter with nothing selected.
 
 ---
 
