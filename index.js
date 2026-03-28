@@ -120,7 +120,13 @@ async function generate() {
     process.exit(1);
   }
 
-  return msg.replace(/```/g, "").trim();
+  const cleaned = msg
+  .replace(/```/g, "")        // code blocks entfernen
+  .replace(/^git\s*/i, "")    // "git" am Anfang weg
+  .replace(/^\s*\n/, "")      // leere Zeile oben
+  .trim();
+
+  return cleaned;
 }
 
 function render(msg) {
