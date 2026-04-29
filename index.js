@@ -7,6 +7,8 @@ import OpenAI from "openai";
 
 
 class OpenAIClient {
+  static MODEL = "gpt-5.4-nano";
+
   constructor() {
     if (!process.env.OPENAI_API_KEY) {
       console.log(chalk.red.bold("\n✖ OPENAI_API_KEY not set\n"));
@@ -16,24 +18,33 @@ class OpenAIClient {
     this.client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   }
 
+  async complete(prompt) {
+    const response = await this.client.responses.create({
+      model: OpenAIClient.MODEL,
+      input: prompt
+    });
+
+    return (response.output_text || "").trim();
+  }
+
   async streamCompletion(prompt, onToken) {
     const stream = await this.client.responses.stream({
-      model: "gpt-4o-mini",
+      model: OpenAIClient.MODEL,
       input: prompt
     });
 
     let fullText = "";
+
     for await (const event of stream) {
       if (event.type === "response.output_text.delta") {
         fullText += event.delta;
         onToken(fullText);
       }
     }
+
     return fullText.trim();
   }
-
 }
-
 
 class GitService {
   getBranch() {
@@ -51,7 +62,12 @@ class GitService {
         /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/
       );
       if (!match) return null;
-      return { files: match[1], insertions: match[2] || 0, deletions: match[3] || 0 };
+
+      return {
+        files: match[1],
+        insertions: match[2] || 0,
+        deletions: match[3] || 0
+      };
     } catch {
       return null;
     }
@@ -61,7 +77,31 @@ class GitService {
     return execSync("git diff --cached --name-only").toString().trim();
   }
 
-  // Last N commits as few-shot style examples
+  getStagedFileSummaries() {
+    try {
+      const status = execSync("git diff --cached --name-status").toString().trim();
+      if (!status) return "";
+
+      return status
+        .split("\n")
+        .map(line => {
+          const [status, ...rest] = line.trim().split(/\s+/);
+          return `${status}: ${rest.join(" ")}`;
+        })
+        .join("\n");
+    } catch {
+      return "";
+    }
+  }
+
+  getStagedStats() {
+    try {
+      return execSync("git diff --cached --shortstat").toString().trim();
+    } catch {
+      return "";
+    }
+  }
+
   getRecentCommits(n = 8) {
     try {
       return execSync(`git log --oneline -${n} --no-merges`).toString().trim();
@@ -70,66 +110,88 @@ class GitService {
     }
   }
 
-  // Extract branch name and any issue number embedded in it
+  getRecentCommitStyleHints(n = 12) {
+    try {
+      const commits = execSync(`git log --format=%s -${n} --no-merges`).toString().trim();
+      if (!commits) return "";
+
+      const scopes = new Set();
+      const types = new Set();
+
+      for (const line of commits.split("\n")) {
+        const match = line.match(/^(\w+)(?:\(([^)]+)\))?:/);
+        if (match) {
+          types.add(match[1]);
+          if (match[2]) scopes.add(match[2]);
+        }
+      }
+
+      return [
+        types.size ? `Recent commit types: ${[...types].join(", ")}` : "",
+        scopes.size ? `Recent scopes: ${[...scopes].slice(0, 10).join(", ")}` : ""
+      ].filter(Boolean).join("\n");
+    } catch {
+      return "";
+    }
+  }
+
   getBranchContext() {
     const branch = this.getBranch();
     const issueMatch = branch.match(/[/#-](\d{2,})/);
+
     return {
       branch,
       issue: issueMatch ? `#${issueMatch[1]}` : null
     };
   }
 
-  // Derive language/tech hints from staged file extensions
   getFileTypeHints(stagedFiles) {
     const files = stagedFiles.split("\n").map(f => f.trim()).filter(Boolean);
     const hints = new Set();
 
     const extMap = {
-      ".java":   "Java",
-      ".kt":     "Kotlin",
-      ".scala":  "Scala",
-      ".ts":     "TypeScript",
-      ".tsx":    "TypeScript/React",
-      ".js":     "JavaScript",
-      ".jsx":    "JavaScript/React",
-      ".py":     "Python",
-      ".go":     "Go",
-      ".rs":     "Rust",
-      ".rb":     "Ruby",
-      ".php":    "PHP",
-      ".cs":     "C#",
-      ".cpp":    "C++",
-      ".c":      "C",
-      ".swift":  "Swift",
+      ".java": "Java",
+      ".kt": "Kotlin",
+      ".scala": "Scala",
+      ".ts": "TypeScript",
+      ".tsx": "TypeScript/React",
+      ".js": "JavaScript",
+      ".jsx": "JavaScript/React",
+      ".py": "Python",
+      ".go": "Go",
+      ".rs": "Rust",
+      ".rb": "Ruby",
+      ".php": "PHP",
+      ".cs": "C#",
+      ".cpp": "C++",
+      ".c": "C",
+      ".swift": "Swift"
     };
 
     for (const file of files) {
       for (const [ext, lang] of Object.entries(extMap)) {
         if (file.endsWith(ext)) hints.add(lang);
       }
-      if (file.match(/[Tt]est|[Ss]pec/))           hints.add("includes tests");
-      if (file.match(/migration/i))                 hints.add("includes DB migration");
+
+      if (/[Tt]est|[Ss]pec/.test(file)) hints.add("includes tests");
+      if (/migration/i.test(file)) hints.add("includes DB migration");
       if (file.endsWith(".md") || file.endsWith(".mdx")) hints.add("includes docs");
-      if (file.match(/Dockerfile|docker-compose/i)) hints.add("Docker config");
-      if (file.match(/\.ya?ml$/) && file.match(/ci|github|gitlab|pipeline/i)) hints.add("CI config");
-      if (file.match(/pom\.xml|build\.gradle|package\.json|Cargo\.toml|go\.mod/)) hints.add("build/dep file");
+      if (/Dockerfile|docker-compose/i.test(file)) hints.add("Docker config");
+      if (/\.ya?ml$/i.test(file) && /ci|github|gitlab|pipeline/i.test(file)) hints.add("CI config");
+      if (/pom\.xml|build\.gradle|package\.json|Cargo\.toml|go\.mod/i.test(file)) hints.add("build/dep file");
     }
 
     return [...hints].join(", ");
   }
 
-  // Extract changed symbol names (functions, methods, classes) from @@ hunk headers.
-  // This works for Java, Python, Go, JS/TS, Ruby, Rust, etc. because git already
-  // parses the nearest function/class name into the @@ line.
   getChangedSymbols() {
     try {
       const raw = execSync("git diff --cached --unified=0").toString();
       const symbols = new Set();
 
-      // Match @@ -x,y +a,b @@ <symbol context>
       const hunkHeader = /^@@[^@]+@@\s*(.+)$/gm;
       let match;
+
       while ((match = hunkHeader.exec(raw)) !== null) {
         const ctx = match[1].trim();
         if (ctx && ctx.length < 120) symbols.add(ctx);
@@ -145,18 +207,18 @@ class GitService {
     const raw = execSync("git diff --cached").toString();
     const lines = raw.split("\n");
 
-    if (lines.length <= 800) return raw;
+    if (lines.length <= 800) {
+      return raw;
+    }
 
-    // Large diff: stat + hunk headers only (preserves semantic signal)
     console.log(chalk.yellow("⚠ Large diff — semantic summary mode\n"));
 
     try {
       const stat = execSync("git diff --cached --stat").toString().trim();
-      // Pull all hunk headers: file names + changed symbol contexts
       const headers = execSync("git diff --cached --unified=0")
         .toString()
         .split("\n")
-        .filter(l => l.startsWith("+++") || l.startsWith("@@"))
+        .filter(line => line.startsWith("+++") || line.startsWith("@@"))
         .slice(0, 150)
         .join("\n");
 
@@ -334,129 +396,153 @@ class StagingService {
 
 class CommitGenerator {
   constructor(ai) {
-    this.ai               = ai;
+    this.ai = ai;
     this.extraInstruction = "";
   }
 
-  // ── Step 1: lean reasoning (max_tokens kept tiny → fast) ──────────────
-  // Only passes the signal-rich parts: symbols, branch, file list.
-  // Skips the full diff to keep this call short.
   buildReasoningPrompt(files, diff, context) {
-    const { branch, issue, fileHints, changedSymbols } = context;
+    const {
+      branch,
+      issue,
+      fileHints,
+      changedSymbols,
+      stagedFileSummaries,
+      stagedStats,
+      recentStyleHints
+    } = context;
 
-    // For reasoning we only need a diff sketch — first 60 lines is enough
-    const diffSketch = diff.split("\n").slice(0, 60).join("\n");
+    const diffSketch = diff.split("\n").slice(0, 80).join("\n");
 
     return `
-      Analyse this git change in 2-3 sentences. Answer only:
-      1. Primary intent (feat / fix / refactor / perf / test / docs / chore / ci)?
-      2. Most specific scope (class name, module, subsystem)?
-      3. If multiple concerns are staged, which is dominant?
+Analyse staged git changes and identify the dominant commit intent.
 
-      Branch: ${branch}${issue ? `  (issue: ${issue})` : ""}
-      ${fileHints      ? `Technologies: ${fileHints}`          : ""}
-      ${changedSymbols ? `Changed symbols:\n${changedSymbols}` : ""}
+Return exactly this format:
 
-      Staged files:
-      ${files}
+TYPE: <feat|fix|refactor|perf|test|docs|chore|ci|build|revert>
+SCOPE: <single scope or NONE>
+INTENT: <one sentence>
+BULLETS:
+- <specific change>
+- <specific change>
+- <specific change>
 
-      Diff (sketch):
-      ${diffSketch}
+Rules:
+- Pick the single dominant concern
+- Use a narrow scope if clear, otherwise NONE
+- Bullets must be concrete
+- No code fences
+- No markdown headings
 
-      Respond with a plain paragraph. No commit message, no lists.
-      `.trim();
+Branch: ${branch}${issue ? ` (${issue})` : ""}
+${fileHints ? `Technologies: ${fileHints}` : ""}
+${stagedStats ? `Stats: ${stagedStats}` : ""}
+${recentStyleHints ? `${recentStyleHints}` : ""}
+${stagedFileSummaries ? `Staged file summary:\n${stagedFileSummaries}` : ""}
+${changedSymbols ? `Changed symbols:\n${changedSymbols}` : ""}
+
+Staged files:
+${files}
+
+Diff sketch:
+${diffSketch}
+    `.trim();
   }
 
-  // ── Step 2: message generation with full context + reasoning ──────────
   buildMessagePrompt(files, diff, context, reasoning) {
-    const { branch, issue, fileHints, changedSymbols, recentCommits } = context;
+    const {
+      branch,
+      issue,
+      fileHints,
+      changedSymbols,
+      recentCommits,
+      recentStyleHints,
+      stagedFileSummaries,
+      stagedStats
+    } = context;
 
     const breakingHint =
       diff.includes("BREAKING") || diff.includes("breaking change")
-        ? "⚠ Only add BREAKING CHANGE footer if the diff shows a removed/changed public API or contract — not for internal refactors."
+        ? "Only include BREAKING CHANGE if a public API, schema, interface, or contract truly changed."
         : "";
 
     return `
-      You are writing a git commit message. The intent has already been analysed.
+Write a Conventional Commit message from this analysis:
 
-      ──────────────────────────────────────────────
-      INTENT ANALYSIS (ground your message in this)
-      ──────────────────────────────────────────────
-      ${reasoning}
+${reasoning}
 
-      ──────────────────────────────────────────────
-      OUTPUT FORMAT — Conventional Commits
-      ──────────────────────────────────────────────
-      <type>(<scope>): <short summary>
+Output format:
+<type>(<scope>): <summary>
 
-      - <concrete change #1>
-      - <concrete change #2>
-      ...
+- <bullet>
+- <bullet>
 
-      [BREAKING CHANGE: <description>]   ← real API/contract breaks only
+Optional:
+BREAKING CHANGE: <description>
 
-      Rules:
-      - First line ≤ 72 chars, imperative mood, no period
-      - type: feat | fix | refactor | perf | test | docs | chore | ci | build | revert
-      - scope: single noun from the dominant changed class/module — omit if unclear
-      - Each bullet names ONE specific thing: a method added, a class removed, a check introduced
-      - Concrete verbs only: add, extract, remove, rename, replace, validate, wire, register, split, deprecate
-      - FORBIDDEN words: update, improve, change, various, misc, consolidate, enhance, streamline, refine
-      - Plain text only — no markdown, no code fences
-      - Do NOT mention file names unless intrinsically meaningful (e.g. a migration file)
-      - Do NOT invent behaviour absent from the diff
-      - Do NOT add BREAKING CHANGE unless a public API/interface/contract changed
-      ${breakingHint}
+Rules:
+- Summary max 72 chars
+- Imperative mood
+- No trailing period
+- Scope only if helpful
+- Prefer 2 bullets, max 3
+- Bullets must be concrete and visible in staged changes
+- Do not invent behavior
+- Do not use vague words like: update, improve, change, misc, cleanup, various
+- Prefer verbs like: add, remove, extract, rename, validate, wire, split, replace, handle
+- Plain text only
+${breakingHint}
 
-      ──────────────────────────────────────────────
-      CONTEXT
-      ──────────────────────────────────────────────
-      Branch: ${branch}${issue ? `  (issue: ${issue})` : ""}
-      ${fileHints ? `Technologies: ${fileHints}` : ""}
-      ${recentCommits  ? `\nRecent commits (match their scope/style conventions):\n${recentCommits}` : ""}
-      ${changedSymbols ? `\nChanged symbols:\n${changedSymbols}`                                     : ""}
-      ${this.extraInstruction ? `\nUser instruction: ${this.extraInstruction}`                       : ""}
+Context:
+Branch: ${branch}${issue ? ` (${issue})` : ""}
+${fileHints ? `Technologies: ${fileHints}` : ""}
+${stagedStats ? `Stats: ${stagedStats}` : ""}
+${recentStyleHints ? `${recentStyleHints}` : ""}
+${recentCommits ? `Recent commits:\n${recentCommits}` : ""}
+${stagedFileSummaries ? `Staged file summary:\n${stagedFileSummaries}` : ""}
+${changedSymbols ? `Changed symbols:\n${changedSymbols}` : ""}
+${this.extraInstruction ? `User instruction: ${this.extraInstruction}` : ""}
 
-      ──────────────────────────────────────────────
-      STAGED FILES
-      ──────────────────────────────────────────────
-      ${files}
+Staged files:
+${files}
 
-      ──────────────────────────────────────────────
-      DIFF
-      ──────────────────────────────────────────────
-      ${diff}
+Diff:
+${diff}
+    `.trim();
+  }
 
-      Write the commit message now. Nothing else.
-      `.trim();
+  sanitizeCommitMessage(message) {
+    return (message || "")
+      .replace(/```[\s\S]*?\n/g, "")
+      .replace(/```/g, "")
+      .replace(/^plaintext\s*/i, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   }
 
   async generate(files, diff, context = {}) {
-    // Step 1 — reasoning (silent, fast: short prompt + short answer)
     const spinner = ora("Analysing intent...").start();
+
     let reasoning = "";
     try {
       reasoning = await this.ai.complete(
         this.buildReasoningPrompt(files, diff, context)
       );
     } catch {
-      // non-fatal — continue without reasoning
+      reasoning = "";
     }
+
     spinner.text = "Generating commit message...";
 
-    // Step 2 — streamed message (spinner stays alive, no extra pause)
     const result = await this.ai.streamCompletion(
       this.buildMessagePrompt(files, diff, context, reasoning),
-      text => { spinner.stop(); UI.render(text); }
+      text => {
+        spinner.stop();
+        UI.render(text);
+      }
     );
 
     spinner.stop();
-
-    return result
-      .replace(/```[\s\S]*?\n/g, "")
-      .replace(/```/g, "")
-      .replace(/^plaintext\s*/i, "")
-      .trim();
+    return this.sanitizeCommitMessage(result);
   }
 }
 
@@ -483,13 +569,16 @@ class App {
   }
 
   buildContext(files) {
-    return {
-      recentCommits:  this.git.getRecentCommits(8),
-      changedSymbols: this.git.getChangedSymbols(),
-      fileHints:      this.git.getFileTypeHints(files),
-      ...this.git.getBranchContext()  // { branch, issue }
-    };
-  }
+  return {
+    recentCommits: this.git.getRecentCommits(8),
+    recentStyleHints: this.git.getRecentCommitStyleHints(12),
+    changedSymbols: this.git.getChangedSymbols(),
+    fileHints: this.git.getFileTypeHints(files),
+    stagedFileSummaries: this.git.getStagedFileSummaries(),
+    stagedStats: this.git.getStagedStats(),
+    ...this.git.getBranchContext()
+  };
+}
 
   async run() {
     while (true) {
