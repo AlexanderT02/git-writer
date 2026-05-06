@@ -17,8 +17,10 @@ export class App {
   private readonly context: ContextBuilder;
   private readonly generator: CommitGenerator;
   private readonly issueRefs: string[] | null;
+  private readonly fastMode: boolean;
 
-  constructor() {
+  constructor(fastMode = false) {
+    this.fastMode = fastMode;
     this.git = new GitService(config);
     this.ai = createLLM(config);
     this.staging = new StagingService(this.git, config);
@@ -30,9 +32,7 @@ export class App {
   parseIssueRefs(): string[] | null {
     const args = process.argv.slice(2);
     const nums = args.filter((arg) => /^\d+$/.test(arg));
-
     if (!nums.length) return null;
-
     return nums.map((num) => `#${num}`);
   }
 
@@ -42,6 +42,9 @@ export class App {
   }
 
   async run(): Promise<void> {
+     if (this.fastMode) {
+      return this.runFast();
+    }
     while (true) {
       await this.staging.ensureStaged();
 
@@ -106,5 +109,39 @@ export class App {
         process.exit(0);
       }
     }
+  }
+
+  private async runFast(): Promise<void> {
+    this.git.add(["."]);
+
+    const files = this.git.getStagedFiles();
+    if (!files.trim()) {
+      console.log(chalk.gray("\n  Nothing to commit\n"));
+      process.exit(0);
+    }
+
+    const ctx = this.context.build(files);
+    const message = await this.generator.generate(files, ctx);
+    const finalMessage = this.appendIssueRefs(message);
+
+    this.git.commit(finalMessage);
+
+    const stats = this.git.getLastCommitSummary();
+    if (stats) {
+      console.log(
+        chalk.green(
+          "\n✔  Commit created  " +
+            chalk.dim("(") +
+            `${chalk.cyan(stats.files)} files  ` +
+            `${chalk.green("+" + stats.insertions)}  ` +
+            `${chalk.red("-" + stats.deletions)}` +
+            chalk.dim(")"),
+        ),
+      );
+    } else {
+      console.log(chalk.green("\n✔  Commit created\n"));
+    }
+
+    process.exit(0);
   }
 }
