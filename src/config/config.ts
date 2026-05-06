@@ -3,6 +3,7 @@ export type LLMProviderName = "openai" | "ollama";
 export interface AppConfig {
   app: {
     name: string;
+    command: string;
   };
 
   llm: {
@@ -66,16 +67,17 @@ export interface AppConfig {
 export const config: AppConfig = {
   app: {
     name: "git-commit-writer",
+    command: "gcw", // Must match the package.json bin command.
   },
 
-  // Select the LLM backend and models used for the two generation passes.
+  // LLM backend and models used by the two-pass generation flow.
   llm: {
     provider: "openai",
     reasoningModel: "gpt-4o-mini",
     generationModel: "gpt-4o-mini",
   },
 
-  // Git limits and defaults used when collecting repository context.
+  // Git limits used while collecting repository metadata and diff context.
   git: {
     recentCommitCount: 8,
     recentStyleCommitCount: 12,
@@ -87,7 +89,7 @@ export const config: AppConfig = {
     maxBufferBytes: 10 * 1024 * 1024,
   },
 
-  // Controls how much staged file content is sent to the model.
+  // Controls how much file content is sent to the LLM.
   context: {
     tokenBudget: 50_000,
     smallFileThreshold: 3_000,
@@ -95,7 +97,7 @@ export const config: AppConfig = {
     maxFileBufferBytes: 10 * 1024 * 1024,
   },
 
-  // Interactive file selection prompt settings.
+  // Interactive staging prompt behavior.
   staging: {
     pageSize: 25,
     loop: false,
@@ -103,7 +105,7 @@ export const config: AppConfig = {
     help: "↑/↓ move · Space select · Enter confirm",
   },
 
-  // Commit message formatting and prompt constraints.
+  // Commit message output constraints.
   commit: {
     summaryMaxLength: 72,
     reasoningDiffPreviewLines: 80,
@@ -111,7 +113,7 @@ export const config: AppConfig = {
     maxBulletCount: 3,
   },
 
-  // User interface labels and rendering options.
+  // UI labels and rendering options.
   ui: {
     clearScreen: true,
     borderWidth: 60,
