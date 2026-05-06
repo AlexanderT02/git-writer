@@ -1,23 +1,22 @@
 # git-commit-writer
 
-![node](https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square&logo=node.js&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)
-![Conventional Commits](https://img.shields.io/badge/Conventional_Commits-1.0.0-FE5196?style=flat-square&logo=conventionalcommits&logoColor=white)
+A CLI that generates [Conventional Commit](https://www.conventionalcommits.org/) messages from staged Git changes using LLMs.
 
-Interactive CLI for generating clean Conventional Commit messages from staged Git changes.
+You stage your changes, run `gcw`, and get a properly formatted commit message. You can then commit it directly, edit it, regenerate, refine with instructions, or copy it to your clipboard.
 
-`git-commit-writer` exposes the `gcw` command. It helps developers stage changes, generate a commit message with an LLM, then commit, edit, regenerate, refine, or copy the result.
+[![node](https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Conventional Commits](https://img.shields.io/badge/Conventional_Commits-1.0.0-FE5196?style=flat-square&logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
 
 ---
 
 ## Features
 
-- Generate Conventional Commit messages from Git diffs
-- Select and stage files interactively
-- Use already staged files directly
-- Add issue references from CLI args or branch names
-- Refine, regenerate, edit, copy, or commit messages
-- Supports OpenAI and Ollama
+- Generate Conventional Commit messages from git diffs
+- Interactive file staging or use of already staged files
+- Issue references from CLI arguments or branch name detection
+- Iterative workflow: regenerate, refine, edit, copy, or commit
+- Supports OpenAI and Ollama (local LLMs)
 - Extensible LLM provider interface
 
 ---
@@ -42,7 +41,7 @@ gcw --help
 
 ## Usage
 
-Run inside a Git repository:
+Run inside any Git repository:
 
 ```bash
 gcw
@@ -57,50 +56,57 @@ gcw 42 99
 
 Example output:
 
-```text
+```
 feat(cli): add staged file selection
 
 refs #123
 ```
 
----
+### Workflow
 
-## Workflow
+After generating a message, you get these options:
 
-```mermaid
-flowchart TD
-  A[Run gcw] --> B[Read Git status]
-  B --> C{Staged files?}
-  C -->|Yes| D[Use staged files]
-  C -->|No| E[Select files]
-  E --> F[Stage selection]
-  D --> G[Build commit context]
-  F --> G
-  G --> H[Generate commit message]
-  H --> I{Choose action}
-  I -->|Commit| J[git commit]
-  I -->|Edit| K[Edit manually]
-  I -->|Regenerate| H
-  I -->|Refine| L[Apply instruction]
-  I -->|Copy| M[Copy message]
-  I -->|Cancel| N[Exit]
-  K --> J
-  L --> H
+| Action       | What it does                                    |
+|--------------|------------------------------------------------|
+| Commit       | Run `git commit` with the generated message     |
+| Edit         | Modify the message manually before committing   |
+| Regenerate   | Generate a new message from scratch             |
+| Refine       | Adjust the message with a specific instruction  |
+| Copy         | Copy to clipboard                               |
+| Cancel       | Exit without committing                         |
+
+```
+gcw
+ |
+ v
+Read git status
+ |
+ v
+Staged files? -- No --> Select files --> Stage selection
+ | Yes                                        |
+ v                                            v
+Build commit context <------------------------'
+ |
+ v
+Generate commit message
+ |
+ +--> Commit
+ +--> Edit --> Commit
+ +--> Regenerate --> Generate again
+ +--> Refine --> Apply instruction --> Generate
+ +--> Copy
+ +--> Cancel
 ```
 
 ---
 
 ## Configuration
 
-Edit:
+Edit `src/config/config.ts`:
 
-```text
-src/config/config.ts
-```
+### OpenAI
 
-Example:
-
-```ts
+```typescript
 export const config = {
   llm: {
     provider: "openai",
@@ -110,20 +116,20 @@ export const config = {
 };
 ```
 
-### OpenAI
-
 ```bash
 export OPENAI_API_KEY="your_api_key"
 ```
 
 ### Ollama
 
-```ts
-llm: {
-  provider: "ollama",
-  reasoningModel: "llama3.1",
-  generationModel: "llama3.1",
-}
+```typescript
+export const config = {
+  llm: {
+    provider: "ollama",
+    reasoningModel: "llama3.1",
+    generationModel: "llama3.1",
+  },
+};
 ```
 
 Make sure Ollama is running:
@@ -132,43 +138,30 @@ Make sure Ollama is running:
 ollama serve
 ```
 
+Using Ollama keeps everything local — no data leaves your machine.
+
 ---
 
 ## Architecture
 
-```text
+```
 src/
-  index.ts      CLI entrypoint
-  core/         orchestration
-  git/          git status, diff, commit metadata
-  staging/      file selection and staging
-  context/      prompt context builder
-  commit/       commit message generation
-  llm/          OpenAI/Ollama providers
-  config/       runtime config
-  ui/           terminal UI helpers
+  index.ts        CLI entrypoint
+  core/           Orchestration logic
+  git/            Git status, diff, commit metadata
+  staging/        File selection and staging
+  context/        Prompt context builder
+  commit/         Commit message generation
+  llm/            LLM providers (OpenAI, Ollama)
+  config/         Runtime configuration
+  ui/             Terminal UI helpers
 ```
 
----
-
-## Scripts
-
-```bash
-npm run build      # compile TypeScript
-npm run start      # run dist/index.js
-npm run lint       # lint project
-npm run lint:fix   # fix lint issues
-npm run check      # lint + build
-npm run clean      # remove dist
-```
-
----
-
-## Add a Provider
+### Adding a provider
 
 Implement the `LLM` interface:
 
-```ts
+```typescript
 export interface LLM {
   complete(prompt: string): Promise<string>;
   stream(
@@ -178,15 +171,26 @@ export interface LLM {
 }
 ```
 
-Then register it in `src/llm/index.ts` and select it in `src/config/config.ts`.
+Register it in `src/llm/index.ts` and select it in `src/config/config.ts`.
+
+---
+
+## Scripts
+
+| Command            | Description          |
+|--------------------|----------------------|
+| `npm run build`    | Compile TypeScript   |
+| `npm run start`    | Run dist/index.js    |
+| `npm run lint`     | Lint project         |
+| `npm run lint:fix` | Fix lint issues      |
+| `npm run check`    | Lint + build         |
+| `npm run clean`    | Remove dist/         |
 
 ---
 
 ## Privacy
 
-`gcw` sends staged Git context to the configured LLM provider.
-
-Before committing sensitive work, check what is staged:
+`gcw` sends staged git context to the configured LLM provider. Before committing sensitive work:
 
 ```bash
 git diff --staged
