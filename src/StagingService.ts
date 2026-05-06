@@ -1,4 +1,4 @@
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import chalk from "chalk";
 import {
   createPrompt,
@@ -260,12 +260,21 @@ export class StagingService {
   }
 
   getDiffStats(): Map<string, DiffStats> {
+    const runNumstat = (args: string[]): string => {
+      return execFileSync("git", args, {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+    };
+
     try {
-      const raw = execSync(
-        "git diff --numstat HEAD 2>/dev/null || git diff --numstat",
-      )
-        .toString()
-        .trim();
+      let raw = "";
+
+      try {
+        raw = runNumstat(["diff", "--numstat", "HEAD"]);
+      } catch {
+        raw = runNumstat(["diff", "--numstat"]);
+      }
 
       if (!raw) return new Map();
 

@@ -6,39 +6,56 @@ import type {
 } from "./types.js";
 import type { GitService } from "./GitService.js";
 
-const TOKEN_BUDGET = 50_000; // Rough character budget for all generated context.
-const SMALL_FILE_THRESHOLD = 3_000; // Files below this size always get full context.
-const CONTEXT_LINES = 30; // Extra lines around each diff hunk for level 1.
+const TOKEN_BUDGET = 50_000;
+const SMALL_FILE_THRESHOLD = 3_000;
+const CONTEXT_LINES = 30;
+
+const git = (args: string[], maxBuffer = 10 * 1024 * 1024): string => {
+  return execFileSync("git", args, {
+    encoding: "utf8",
+    maxBuffer,
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+};
+
+const gitExists = (ref: string): boolean => {
+  try {
+    execFileSync("git", ["cat-file", "-e", ref], {
+      stdio: ["ignore", "ignore", "ignore"],
+    });
+
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 export class ContextBuilder {
-  constructor(private readonly git: GitService) {}
+  constructor(private readonly gitService: GitService) {}
 
   build(files: string): CommitContext {
     const fileList = files.split("\n").filter(Boolean);
     const fileCount = fileList.length;
 
-    // Cheap, high-value context that is useful for almost every commit.
-    const branchCtx = this.git.getBranchContext();
-    const stagedStats = this.git.getStagedStats();
-    const fileHints = this.git.getFileTypeHints(files);
-    const recentCommits = this.git.getRecentCommits(8);
+    const branchCtx = this.gitService.getBranchContext();
+    const stagedStats = this.gitService.getStagedStats();
+    const fileHints = this.gitService.getFileTypeHints(files);
+    const recentCommits = this.gitService.getRecentCommits(8);
 
-    // Only include broader summaries when multiple files are involved.
     const stagedFileSummaries =
-      fileCount > 1 ? this.git.getStagedFileSummaries() : "";
+      fileCount > 1 ? this.gitService.getStagedFileSummaries() : "";
 
-    // Commit style hints are only worth the extra context for larger changes.
     const recentStyleHints =
-      fileCount > 3 ? this.git.getRecentCommitStyleHints(12) : "";
+      fileCount > 3 ? this.gitService.getRecentCommitStyleHints(12) : "";
 
     const fileContexts = this.buildFileContexts();
 
-    // Symbol hints are only useful when at least one file was truncated.
     const hasAnyTruncated = fileContexts.some((fc) => fc.level < 2);
-    const changedSymbols = hasAnyTruncated ? this.git.getChangedSymbols() : "";
+    const changedSymbols = hasAnyTruncated
+      ? this.gitService.getChangedSymbols()
+      : "";
 
-    // Keep the raw diff available for downstream checks such as breaking-change detection.
-    const _diff = this.git.getDiff();
+    const _diff = this.gitService.getDiff();
 
     return {
       ...branchCtx,
@@ -67,7 +84,6 @@ export class ContextBuilder {
         continue;
       }
 
-      // Binary files cannot provide useful text context.
       if (this.isBinary(entry.file)) {
         results.push({
           level: -1,
@@ -87,7 +103,6 @@ export class ContextBuilder {
       } else if (totalSize <= remaining) {
         result = this.level2(entry, before, after);
       } else {
-        // Fall back from full file context to expanded diff, then to plain diff.
         const l1 = this.level1(entry);
         result = l1.text.length <= remaining ? l1 : this.level0(entry);
       }
@@ -101,12 +116,7 @@ export class ContextBuilder {
 
   level0(entry: StagedEntry): FileContextResult {
     try {
-      const diff = execFileSync("git", [
-        "diff",
-        "--cached",
-        "--",
-        entry.file,
-      ]).toString();
+      const diff = git(["diff", "--cached", "--", entry.file]);
 
       return {
         level: 0,
@@ -122,13 +132,13 @@ export class ContextBuilder {
 
   level1(entry: StagedEntry): FileContextResult {
     try {
-      const diff = execFileSync("git", [
+      const diff = git([
         "diff",
         "--cached",
         `-U${CONTEXT_LINES}`,
         "--",
         entry.file,
-      ]).toString();
+      ]);
 
       return {
         level: 1,
@@ -142,9 +152,9 @@ export class ContextBuilder {
   level2(entry: StagedEntry, before: string, after: string): FileContextResult {
     const parts = [`=== ${entry.file} (${entry.status}) [full] ===`];
 
-    if (entry.status === "A") {
+    if (entry.status === "A" || !before) {
       parts.push("--- NEW FILE ---", after);
-    } else if (entry.status === "D") {
+    } else if (entry.status === "D" || !after) {
       parts.push("--- DELETED FILE ---", before);
     } else {
       parts.push("--- BEFORE ---", before, "--- AFTER ---", after);
@@ -158,21 +168,16 @@ export class ContextBuilder {
 
   getStagedEntries(): StagedEntry[] {
     try {
-      const raw = execFileSync("git", ["diff", "--cached", "--name-status"])
-        .toString()
-        .trim();
+      const raw = git(["diff", "--cached", "--name-status"]).trim();
 
       if (!raw) return [];
 
       return raw.split("\n").map((line) => {
         const parts = line.trim().split(/\s+/);
-        const status = parts[0]?.[0] ?? ""; // Normalize R100 to R.
+        const status = parts[0]?.[0] ?? "";
         const file = parts[parts.length - 1] ?? "";
 
-        return {
-          status,
-          file,
-        };
+        return { status, file };
       });
     } catch {
       return [];
@@ -185,10 +190,12 @@ export class ContextBuilder {
 
     const gitRef = ref === "HEAD" ? `HEAD:${file}` : `:${file}`;
 
+    if (!gitExists(gitRef)) {
+      return "";
+    }
+
     try {
-      return execFileSync("git", ["show", gitRef], {
-        maxBuffer: 10 * 1024 * 1024,
-      }).toString();
+      return git(["show", gitRef]);
     } catch {
       return "";
     }
@@ -196,14 +203,7 @@ export class ContextBuilder {
 
   isBinary(file: string): boolean {
     try {
-      const out = execFileSync("git", [
-        "diff",
-        "--cached",
-        "--numstat",
-        "--",
-        file,
-      ]).toString();
-
+      const out = git(["diff", "--cached", "--numstat", "--", file]);
       return out.startsWith("-\t-\t");
     } catch {
       return false;
