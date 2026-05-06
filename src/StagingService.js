@@ -14,7 +14,7 @@ const STATUS = {
 const getStatus = (code) =>
   STATUS[code] || { icon: "·", color: chalk.dim };
 
-// ── tree node ───────────────────────────────────────────────────────
+
 class TreeNode {
   constructor(name) {
     this.name = name;
@@ -67,8 +67,7 @@ class TreeNode {
   }
 }
 
-// ── alignment ───────────────────────────────────────────────────────
-//
+
 // inquirer renders:
 //   Choice:    "  ◯ {name}"    →  4 chars before name  (2 indent + circle + space)
 //   Separator: "  {line}"      →  2 chars before line   (2 indent)
@@ -145,7 +144,7 @@ export class StagingService {
     return root;
   }
 
-  // ── build inquirer choices ────────────────────────────────────────
+  
   buildChoices(files, stagedExists) {
     const choices = [
       {
