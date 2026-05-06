@@ -3,7 +3,6 @@ export type LLMProviderName = "openai" | "ollama";
 export interface AppConfig {
   app: {
     name: string;
-    command: string;
   };
 
   llm: {
@@ -67,7 +66,6 @@ export interface AppConfig {
 export const config: AppConfig = {
   app: {
     name: "git-commit-writer",
-    command: "gcw",
   },
 
   // Select the LLM backend and models used for the two generation passes.
