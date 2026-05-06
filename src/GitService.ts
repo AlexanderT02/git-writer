@@ -1,49 +1,52 @@
 import { execSync, spawnSync } from "child_process";
 import chalk from "chalk";
+import type { BranchContext, CommitStats } from "./types.js";
 
 export class GitService {
-  getBranch() {
+  getBranch(): string {
     return execSync("git rev-parse --abbrev-ref HEAD").toString().trim();
   }
 
-  getStatus() {
+  getStatus(): string {
     return execSync("git status --porcelain").toString().trim();
   }
 
-  getLastCommitSummary() {
+  getLastCommitSummary(): CommitStats | null {
     try {
       const output = execSync("git show --shortstat -1").toString().trim();
       const match = output.match(
         /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/,
       );
+
       if (!match) return null;
 
       return {
-        files: match[1],
-        insertions: match[2] || 0,
-        deletions: match[3] || 0,
+        files: match[1] ?? "0",
+        insertions: match[2] ?? 0,
+        deletions: match[3] ?? 0,
       };
     } catch {
       return null;
     }
   }
 
-  getStagedFiles() {
+  getStagedFiles(): string {
     return execSync("git diff --cached --name-only").toString().trim();
   }
 
-  getStagedFileSummaries() {
+  getStagedFileSummaries(): string {
     try {
       const status = execSync("git diff --cached --name-status")
         .toString()
         .trim();
+
       if (!status) return "";
 
       return status
         .split("\n")
         .map((line) => {
-          const [status, ...rest] = line.trim().split(/\s+/);
-          return `${status}: ${rest.join(" ")}`;
+          const [statusCode, ...rest] = line.trim().split(/\s+/);
+          return `${statusCode}: ${rest.join(" ")}`;
         })
         .join("\n");
     } catch {
@@ -51,7 +54,7 @@ export class GitService {
     }
   }
 
-  getStagedStats() {
+  getStagedStats(): string {
     try {
       return execSync("git diff --cached --shortstat").toString().trim();
     } catch {
@@ -59,7 +62,7 @@ export class GitService {
     }
   }
 
-  getRecentCommits(n = 8) {
+  getRecentCommits(n = 8): string {
     try {
       return execSync(`git log --oneline -${n} --no-merges`).toString().trim();
     } catch {
@@ -67,20 +70,22 @@ export class GitService {
     }
   }
 
-  getRecentCommitStyleHints(n = 12) {
+  getRecentCommitStyleHints(n = 12): string {
     try {
       const commits = execSync(`git log --format=%s -${n} --no-merges`)
         .toString()
         .trim();
+
       if (!commits) return "";
 
-      const scopes = new Set();
-      const types = new Set();
+      const scopes = new Set<string>();
+      const types = new Set<string>();
 
       for (const line of commits.split("\n")) {
         const match = line.match(/^(\w+)(?:\(([^)]+)\))?:/);
+
         if (match) {
-          types.add(match[1]);
+          types.add(match[1] ?? "");
           if (match[2]) scopes.add(match[2]);
         }
       }
@@ -98,24 +103,25 @@ export class GitService {
     }
   }
 
-  getBranchContext() {
+  getBranchContext(): BranchContext {
     const branch = this.getBranch();
     const issueMatch = branch.match(/[/#-](\d{2,})/);
 
     return {
       branch,
-      issue: issueMatch ? `#${issueMatch[1]}` : null,
+      issue: issueMatch?.[1] ? `#${issueMatch[1]}` : null,
     };
   }
 
-  getFileTypeHints(stagedFiles) {
+  getFileTypeHints(stagedFiles: string): string {
     const files = stagedFiles
       .split("\n")
-      .map((f) => f.trim())
+      .map((file) => file.trim())
       .filter(Boolean);
-    const hints = new Set();
 
-    const extMap = {
+    const hints = new Set<string>();
+
+    const extMap: Record<string, string> = {
       ".java": "Java",
       ".kt": "Kotlin",
       ".scala": "Scala",
@@ -141,30 +147,32 @@ export class GitService {
 
       if (/[Tt]est|[Ss]pec/.test(file)) hints.add("includes tests");
       if (/migration/i.test(file)) hints.add("includes DB migration");
-      if (file.endsWith(".md") || file.endsWith(".mdx"))
+      if (file.endsWith(".md") || file.endsWith(".mdx")) {
         hints.add("includes docs");
+      }
       if (/Dockerfile|docker-compose/i.test(file)) hints.add("Docker config");
-      if (/\.ya?ml$/i.test(file) && /ci|github|gitlab|pipeline/i.test(file))
+      if (/\.ya?ml$/i.test(file) && /ci|github|gitlab|pipeline/i.test(file)) {
         hints.add("CI config");
+      }
       if (
         /pom\.xml|build\.gradle|package\.json|Cargo\.toml|go\.mod/i.test(file)
-      )
+      ) {
         hints.add("build/dep file");
+      }
     }
 
     return [...hints].join(", ");
   }
 
-  getChangedSymbols() {
+  getChangedSymbols(): string {
     try {
       const raw = execSync("git diff --cached --unified=0").toString();
-      const symbols = new Set();
-
+      const symbols = new Set<string>();
       const hunkHeader = /^@@[^@]+@@\s*(.+)$/gm;
-      let match;
+      let match: RegExpExecArray | null;
 
       while ((match = hunkHeader.exec(raw)) !== null) {
-        const ctx = match[1].trim();
+        const ctx = match[1]?.trim() ?? "";
         if (ctx && ctx.length < 120) symbols.add(ctx);
       }
 
@@ -174,13 +182,11 @@ export class GitService {
     }
   }
 
-  getDiff() {
+  getDiff(): string {
     const raw = execSync("git diff --cached").toString();
     const lines = raw.split("\n");
 
-    if (lines.length <= 800) {
-      return raw;
-    }
+    if (lines.length <= 800) return raw;
 
     console.log(chalk.yellow("⚠ Large diff — semantic summary mode\n"));
 
@@ -199,108 +205,11 @@ export class GitService {
     }
   }
 
-  /**
-   * Get full file content before and after for each staged file.
-   * Budget scales per-file based on total file count.
-   */
-  getFullFileContext(maxCharsPerFile = 6000, maxTotalChars = 50000) {
-    const stagedStatus = execSync("git diff --cached --name-status")
-      .toString()
-      .trim();
-
-    if (!stagedStatus) return "";
-
-    const entries = stagedStatus.split("\n").map((line) => {
-      const parts = line.trim().split(/\s+/);
-      const status = parts[0][0]; // normalise R100 → R
-      const file = parts[parts.length - 1];
-      return { status, file };
-    });
-
-    const blocks = [];
-    let totalChars = 0;
-
-    for (const { status, file } of entries) {
-      if (totalChars >= maxTotalChars) {
-        blocks.push(`[remaining files omitted — budget exhausted]`);
-        break;
-      }
-
-      // skip binary files
-      const isBinary = (() => {
-        try {
-          const out = execSync(
-            `git diff --cached --numstat -- "${file}"`,
-          ).toString();
-          return out.startsWith("-\t-\t");
-        } catch {
-          return false;
-        }
-      })();
-
-      if (isBinary) {
-        blocks.push(`=== ${file} ===\n[binary — skipped]`);
-        continue;
-      }
-
-      // content BEFORE (HEAD) — empty for new files
-      let before = "";
-      if (status !== "A") {
-        try {
-          before = execSync(`git show HEAD:"${file}"`, {
-            maxBuffer: 10 * 1024 * 1024,
-          }).toString();
-        } catch {
-          before = "";
-        }
-      }
-
-      // content AFTER (index) — empty for deleted files
-      let after = "";
-      if (status !== "D") {
-        try {
-          after = execSync(`git show :"${file}"`, {
-            maxBuffer: 10 * 1024 * 1024,
-          }).toString();
-        } catch {
-          after = "";
-        }
-      }
-
-      // truncate from the middle so imports/exports stay visible
-      const truncate = (text, limit) => {
-        if (text.length <= limit) return text;
-        const half = Math.floor(limit / 2);
-        return (
-          text.slice(0, half) +
-          `\n\n... [${text.length - limit} chars omitted] ...\n\n` +
-          text.slice(text.length - half)
-        );
-      };
-
-      const beforeTrunc = truncate(before, maxCharsPerFile);
-      const afterTrunc = truncate(after, maxCharsPerFile);
-
-      const block = [
-        `=== ${file} (${status}) ===`,
-        `--- BEFORE ---`,
-        beforeTrunc || "(new file)",
-        `--- AFTER ---`,
-        afterTrunc || "(deleted)",
-      ].join("\n");
-
-      totalChars += block.length;
-      blocks.push(block);
-    }
-
-    return blocks.join("\n\n");
-  }
-
-  add(files) {
+  add(files: string[]): void {
     spawnSync("git", ["add", "--", ...files], { stdio: "inherit" });
   }
 
-  commit(message) {
+  commit(message: string): void {
     execSync("git commit -F -", {
       input: message,
       stdio: ["pipe", "ignore", "ignore"],

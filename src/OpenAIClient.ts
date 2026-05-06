@@ -1,9 +1,12 @@
 import chalk from "chalk";
 import OpenAI from "openai";
+import type { AIClient } from "./types.js";
 
-export class OpenAIClient {
-  static REASONING_MODEL = "gpt-5.5";
-  static GENERATION_MODEL = "gpt-5.4-nano";
+export class OpenAIClient implements AIClient {
+  static readonly REASONING_MODEL = "gpt-5.5";
+  static readonly GENERATION_MODEL = "gpt-5.4-nano";
+
+  private readonly client: OpenAI;
 
   constructor() {
     if (!process.env.OPENAI_API_KEY) {
@@ -14,7 +17,10 @@ export class OpenAIClient {
     this.client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   }
 
-  async complete(prompt, model = OpenAIClient.REASONING_MODEL) {
+  async complete(
+    prompt: string,
+    model = OpenAIClient.REASONING_MODEL,
+  ): Promise<string> {
     const response = await this.client.responses.create({
       model,
       input: prompt,
@@ -24,10 +30,10 @@ export class OpenAIClient {
   }
 
   async streamCompletion(
-    prompt,
-    onToken,
+    prompt: string,
+    onToken: (text: string) => void,
     model = OpenAIClient.GENERATION_MODEL,
-  ) {
+  ): Promise<string> {
     const stream = await this.client.responses.stream({
       model,
       input: prompt,
