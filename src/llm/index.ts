@@ -1,17 +1,21 @@
-import type { AppConfig } from "../config/config.js";
+import type { AppConfig, LLMProviderName } from "../config/config.js";
 import type { LLM } from "./LLM.js";
 import { OllamaProvider } from "./OllamaProvider.js";
 import { OpenAIProvider } from "./OpenAIProvider.js";
 
+type LLMProviderConstructor = new (config: AppConfig) => LLM;
+
+const providers = {
+  openai: OpenAIProvider,
+  ollama: OllamaProvider,
+} satisfies Record<LLMProviderName, LLMProviderConstructor>;
+
 export function createLLM(config: AppConfig): LLM {
-  switch (config.llm.provider) {
-    case "openai":
-      return new OpenAIProvider(config);
+  const Provider = providers[config.llm.provider];
 
-    case "ollama":
-      return new OllamaProvider(config);
-
-    default:
-      throw new Error(`Unsupported LLM provider: ${config.llm.provider}`);
+  if (!Provider) {
+    throw new Error(`Unsupported LLM provider: ${config.llm.provider}`);
   }
+
+  return new Provider(config);
 }
