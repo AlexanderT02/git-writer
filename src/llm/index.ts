@@ -1,10 +1,17 @@
+import type { AppConfig } from "../config/config.js";
 import type { LLM } from "./LLM.js";
+import { OllamaProvider } from "./OllamaProvider.js";
 import { OpenAIProvider } from "./OpenAIProvider.js";
-// import { OllamaProvider } from "./OllamaProvider.js";
 
-export function createLLM(): LLM {
-  return new OpenAIProvider();
+export function createLLM(config: AppConfig): LLM {
+  switch (config.llm.provider) {
+    case "openai":
+      return new OpenAIProvider(config);
 
-  // To switch provider manually:
-  // return new OllamaProvider();
+    case "ollama":
+      return new OllamaProvider(config);
+
+    default:
+      throw new Error(`Unsupported LLM provider: ${config.llm.provider}`);
+  }
 }

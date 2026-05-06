@@ -1,8 +1,9 @@
+import type { AppConfig } from "../config/config.js";
 import type { LLM } from "./LLM.js";
 
-const MODEL = "llama3.2";
-
 export class OllamaProvider implements LLM {
+  constructor(private readonly config: AppConfig) {}
+
   async complete(prompt: string): Promise<string> {
     const response = await fetch("http://localhost:11434/api/generate", {
       method: "POST",
@@ -10,7 +11,7 @@ export class OllamaProvider implements LLM {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: MODEL,
+        model: this.config.llm.reasoningModel,
         prompt,
         stream: false,
       }),
