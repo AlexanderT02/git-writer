@@ -14,6 +14,7 @@ You stage your changes, run `gcw`, and get a properly formatted commit message. 
 
 - Generate Conventional Commit messages from git diffs
 - Interactive file staging or use of already staged files
+- Fast mode: stage everything, generate, and commit in one step
 - Issue references from CLI arguments or branch name detection
 - Iterative workflow: regenerate, refine, edit, copy, or commit
 - Supports OpenAI and Ollama (local LLMs)
@@ -54,6 +55,21 @@ gcw 123
 gcw 42 99
 ```
 
+### Fast mode
+
+Stage all changes, generate a commit message, and commit immediately — no prompts, no menus:
+
+```bash
+gcw -f
+gcw --fast
+```
+
+Works with issue references too:
+
+```bash
+gcw -f 123
+```
+
 Example output:
 
 ```
@@ -62,9 +78,9 @@ feat(cli): add staged file selection
 refs #123
 ```
 
-### Workflow
+### Interactive workflow
 
-After generating a message, you get these options:
+In the default interactive mode, after generating a message you get these options:
 
 | Action       | What it does                                    |
 |--------------|------------------------------------------------|
