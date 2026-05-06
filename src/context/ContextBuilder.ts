@@ -18,7 +18,6 @@ export class ContextBuilder {
 
     const branchCtx = this.gitService.getBranchContext();
     const stagedStats = this.gitService.getStagedStats();
-    const fileHints = this.gitService.getFileTypeHints(files);
     const recentCommits = this.gitService.getRecentCommits(
       this.config.git.recentCommitCount,
     );
@@ -34,8 +33,8 @@ export class ContextBuilder {
         : "";
 
     const fileContexts = this.buildFileContexts();
+    const hasAnyTruncated = fileContexts.some((ctx) => ctx.level < 2);
 
-    const hasAnyTruncated = fileContexts.some((fc) => fc.level < 2);
     const changedSymbols = hasAnyTruncated
       ? this.gitService.getChangedSymbols()
       : "";
@@ -45,12 +44,11 @@ export class ContextBuilder {
     return {
       ...branchCtx,
       stagedStats,
-      fileHints,
       stagedFileSummaries,
       recentStyleHints,
       recentCommits,
       changedSymbols,
-      fileContext: fileContexts.map((fc) => fc.text).join("\n\n"),
+      fileContext: fileContexts.map((ctx) => ctx.text).join("\n\n"),
       _diff,
     };
   }
@@ -100,12 +98,7 @@ export class ContextBuilder {
     }
 
     const level1 = this.level1(entry);
-
-    if (level1.text.length <= remaining) {
-      return level1;
-    }
-
-    return this.level0(entry);
+    return level1.text.length <= remaining ? level1 : this.level0(entry);
   }
 
   private skipped(entry: StagedEntry): FileContextResult {
@@ -146,14 +139,12 @@ export class ContextBuilder {
       this.config.context.contextLines,
     );
 
-    if (!diff) {
-      return this.level0(entry);
-    }
-
-    return {
-      level: 1,
-      text: `=== ${entry.file} (${entry.status}) [diff +context] ===\n${diff}`,
-    };
+    return diff
+      ? {
+          level: 1,
+          text: `=== ${entry.file} (${entry.status}) [diff +context] ===\n${diff}`,
+        }
+      : this.level0(entry);
   }
 
   level2(entry: StagedEntry, before: string, after: string): FileContextResult {

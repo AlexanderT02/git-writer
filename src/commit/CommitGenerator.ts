@@ -16,7 +16,6 @@ export class CommitGenerator {
     const {
       branch,
       issue,
-      fileHints,
       changedSymbols,
       stagedFileSummaries,
       stagedStats,
@@ -28,7 +27,6 @@ export class CommitGenerator {
     // Keep the reasoning prompt focused on intent, not final wording.
     const sections = [
       `Branch: ${branch}${issue ? ` (${issue})` : ""}`,
-      fileHints && `Technologies: ${fileHints}`,
       stagedStats && `Stats: ${stagedStats}`,
       recentStyleHints,
       stagedFileSummaries && `Staged files:\n${stagedFileSummaries}`,
@@ -92,7 +90,6 @@ ${sections}`;
     const {
       branch,
       issue,
-      fileHints,
       changedSymbols,
       recentCommits,
       recentStyleHints,
@@ -112,7 +109,6 @@ ${sections}`;
     // The final prompt adds style examples and optional user guidance.
     const sections = [
       `Branch: ${branch}${issue ? ` (${issue})` : ""}`,
-      fileHints && `Technologies: ${fileHints}`,
       stagedStats && `Stats: ${stagedStats}`,
       recentStyleHints,
       recentCommits && `Recent commits:\n${recentCommits}`,

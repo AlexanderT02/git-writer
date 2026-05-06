@@ -29,7 +29,6 @@ export interface CommitStats {
 
 export interface CommitContext extends BranchContext {
   stagedStats: string;
-  fileHints: string;
   stagedFileSummaries: string;
   recentStyleHints: string;
   recentCommits: string;
