@@ -5,13 +5,14 @@ import clipboard from "clipboardy";
 import { CommitGenerator } from "./src/CommitGenerator.js";
 import { ContextBuilder } from "./src/ContextBuilder.js";
 import { GitService } from "./src/GitService.js";
-import { OpenAIClient } from "./src/OpenAIClient.js";
+import { createLLM } from "./src/llm/index.js";
+import type { LLM } from "./src/llm/LLM.js";
 import { StagingService } from "./src/StagingService.js";
 import { UI } from "./src/UI.js";
 
 class App {
   private readonly git: GitService;
-  private readonly ai: OpenAIClient;
+  private readonly ai: LLM;
   private readonly staging: StagingService;
   private readonly context: ContextBuilder;
   private readonly generator: CommitGenerator;
@@ -19,7 +20,7 @@ class App {
 
   constructor() {
     this.git = new GitService();
-    this.ai = new OpenAIClient();
+    this.ai = createLLM();
     this.staging = new StagingService(this.git);
     this.context = new ContextBuilder(this.git);
     this.generator = new CommitGenerator(this.ai);

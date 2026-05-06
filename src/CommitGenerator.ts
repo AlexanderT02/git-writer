@@ -1,11 +1,12 @@
 import ora from "ora";
 import { UI } from "./UI.js";
-import type { AIClient, CommitContext } from "./types.js";
+import type { CommitContext } from "./types.js";
+import type { LLM } from "./llm/LLM.js";
 
 export class CommitGenerator {
   extraInstruction = "";
 
-  constructor(private readonly ai: AIClient) {}
+  constructor(private readonly ai: LLM) {}
 
   buildReasoningPrompt(files: string, context: CommitContext): string {
     const {
@@ -196,10 +197,9 @@ ${sections}`;
 
     spinner.text = "Generating commit message...";
 
-    const result = await this.ai.streamCompletion(
+    const result = await this.ai.stream(
       this.buildMessagePrompt(files, context, reasoning),
       (text) => {
-        // Stop the spinner before rendering streamed output.
         spinner.stop();
         UI.render(text);
       },
