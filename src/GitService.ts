@@ -206,7 +206,14 @@ export class GitService {
   }
 
   add(files: string[]): void {
-    spawnSync("git", ["add", "--", ...files], { stdio: "inherit" });
+    const result = spawnSync("git", ["add", "--", ...files], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    if (result.status !== 0) {
+      throw new Error(result.stderr || "Failed to stage files");
+    }
   }
 
   commit(message: string): void {
