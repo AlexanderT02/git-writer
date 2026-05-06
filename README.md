@@ -134,7 +134,7 @@ Runtime behavior lives in:
 src/config/config.ts
 ```
 
-Change this file to configure:
+Use it to configure:
 
 ```text
 - LLM provider
@@ -169,16 +169,16 @@ src/llm/
   OllamaProvider.ts
 ```
 
-`LLM.ts` defines the small interface used by the app.  
+`LLM.ts` defines the provider interface.  
 `index.ts` maps provider names to provider classes.
 
 To add a provider:
 
 ```text
-1. Add ProviderName to LLMProviderName in config.ts
+1. Add the provider name to LLMProviderName
 2. Create a provider class implementing LLM
-3. Add it to the provider map in src/llm/index.ts
-4. Select it in config.ts
+3. Register it in src/llm/index.ts
+4. Select it in src/config/config.ts
 ```
 
 ---
@@ -194,7 +194,7 @@ Level 2: full before/after file content
 ```
 
 Small files get full context. Larger files are reduced automatically.  
-Deleted files are represented as deleted without sending the removed content.
+Deleted files are represented without sending the removed content.
 
 ---
 
@@ -205,10 +205,10 @@ src/
   index.ts              CLI entrypoint
   core/                 app orchestration
   config/               central typed config
-  commit/               prompt and commit-message generation
+  commit/               prompt and message generation
   context/              staged-change context builder
   git/                  Git wrapper and repo metadata
-  llm/                  provider abstraction and implementations
+  llm/                  provider interface and implementations
   staging/              file selection and staging UI
   types/                shared types
   ui/                   generic UI helpers
@@ -224,10 +224,13 @@ npm run build
 node dist/index.js
 ```
 
-Clean build output:
+Useful scripts:
 
 ```bash
-npm run clean
+npm run lint      # check lint and formatting rules
+npm run lint:fix  # auto-fix lint and formatting issues
+npm run check     # lint + build
+npm run clean     # remove dist/
 ```
 
 Recommended `.gitignore`:
