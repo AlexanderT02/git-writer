@@ -98,6 +98,15 @@ export class ContextBuilder {
         continue;
       }
 
+      // Deleted files do not need full old content for commit-message generation.
+      if (entry.status === "D") {
+        const result = this.level2(entry, "", "");
+
+        remaining -= result.text.length;
+        results.push(result);
+        continue;
+      }
+
       const before = this.getFileContent("HEAD", entry.file, entry.status);
       const after = this.getFileContent("INDEX", entry.file, entry.status);
       const totalSize = before.length + after.length;
@@ -162,12 +171,17 @@ export class ContextBuilder {
   }
 
   level2(entry: StagedEntry, before: string, after: string): FileContextResult {
+    if (entry.status === "D") {
+      return {
+        level: 2,
+        text: `=== ${entry.file} (${entry.status}) [deleted] ===\n--- DELETED FILE ---`,
+      };
+    }
+
     const parts = [`=== ${entry.file} (${entry.status}) [full] ===`];
 
     if (entry.status === "A" || !before) {
       parts.push("--- NEW FILE ---", after);
-    } else if (entry.status === "D" || !after) {
-      parts.push("--- DELETED FILE ---", before);
     } else {
       parts.push("--- BEFORE ---", before, "--- AFTER ---", after);
     }
