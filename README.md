@@ -91,27 +91,22 @@ In the default interactive mode, after generating a message you get these option
 | Copy         | Copy to clipboard                               |
 | Cancel       | Exit without committing                         |
 
-```
-gcw
- |
- v
-Read git status
- |
- v
-Staged files? -- No --> Select files --> Stage selection
- | Yes                                        |
- v                                            v
-Build commit context <------------------------'
- |
- v
-Generate commit message
- |
- +--> Commit
- +--> Edit --> Commit
- +--> Regenerate --> Generate again
- +--> Refine --> Apply instruction --> Generate
- +--> Copy
- +--> Cancel
+```mermaid
+flowchart TD
+    A[gcw] --> B[Read git status]
+    B --> C{Staged files?}
+    C -- Yes --> E[Build commit context]
+    C -- No --> D[Select files interactively]
+    D --> S[Stage selection]
+    S --> E
+    E --> F[Generate commit message]
+    F --> G{Choose action}
+    G -- Commit --> H[git commit]
+    G -- Edit --> I[Edit manually] --> H
+    G -- Regenerate --> F
+    G -- Refine --> J[Apply instruction] --> F
+    G -- Copy --> K[Copy to clipboard]
+    G -- Cancel --> L[Exit]
 ```
 
 ---
