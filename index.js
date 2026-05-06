@@ -18,6 +18,10 @@ class App {
     this.issueRefs = this.parseIssueRefs();
   }
 
+
+
+  
+
   parseIssueRefs() {
     const args = process.argv.slice(2);
     const nums = args.filter((a) => /^\d+$/.test(a));
