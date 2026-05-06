@@ -1,258 +1,203 @@
 # git-commit-writer
 
-`gcw` is a small interactive CLI that writes Conventional Commit messages from staged Git changes.
+Interactive CLI for generating clean Conventional Commit messages from staged Git changes.
 
-It can stage files, build compact Git context, ask a configurable LLM provider for a commit message, and then let you commit, edit, regenerate, refine, or copy the result.
+`git-commit-writer` exposes the `gcw` command. It helps developers stage changes, generate a commit message with an LLM, then commit, edit, regenerate, refine, or copy the result.
+
+---
+
+## Features
+
+- Generate Conventional Commit messages from Git diffs
+- Select and stage files interactively
+- Use already staged files directly
+- Add issue references from CLI args or branch names
+- Refine, regenerate, edit, copy, or commit messages
+- Supports OpenAI and Ollama
+- Extensible LLM provider interface
 
 ---
 
 ## Install
 
 ```bash
+git clone <repo-url>
+cd git-commit-writer
 npm install
 npm run build
 npm link
 ```
 
-Set your provider key.
+Verify:
 
 ```bash
-# Windows PowerShell
-$env:OPENAI_API_KEY="your_api_key"
-
-# Windows CMD
-setx OPENAI_API_KEY "your_api_key"
-
-# macOS / Linux
-export OPENAI_API_KEY="your_api_key"
+gcw --help
 ```
-
-Restart your terminal after using `setx`.
 
 ---
 
 ## Usage
 
+Run inside a Git repository:
+
 ```bash
 gcw
 ```
 
-`gcw` opens an interactive flow:
-
-```text
-? Select files to stage
-  ↑/↓ move · Space select · Enter confirm
-
-  ◯ ★ Stage all changes
-
-  src/
-  ├─ ◯ ± GitService.ts (+12/-4)
-  ├─ ● + ContextBuilder.ts (+80)
-  └─ ◯ ? UI.ts (+24)
-```
-
-Markers:
-
-```text
-◯ not selected
-● selected
-```
-
-Status icons:
-
-```text
-± modified
-+ added
-- deleted
-→ renamed
-? untracked
-```
-
-If files are already staged, you can select:
-
-```text
-◯ ↳ use already staged files
-```
-
----
-
-## After generation
-
-Choose what to do with the generated commit message:
-
-```text
-Commit
-Edit message manually
-Regenerate
-Refine with instruction
-Copy to clipboard
-Cancel
-```
-
-Example refine instruction:
-
-```text
-Focus on the TypeScript migration
-```
-
----
-
-## Issue references
-
-Pass issue numbers directly:
+With issue references:
 
 ```bash
 gcw 123
 gcw 42 99
 ```
 
-This appends:
+Example output:
 
 ```text
+feat(cli): add staged file selection
+
 refs #123
-```
-
-or:
-
-```text
-refs #42, #99
-```
-
-If no issue is passed, `gcw` can infer one from the branch name:
-
-```text
-feature/123-login -> #123
 ```
 
 ---
 
-## Config
+## Workflow
 
-Runtime behavior lives in:
+```mermaid
+flowchart TD
+  A[Run gcw] --> B[Read Git status]
+  B --> C{Staged files?}
+  C -->|Yes| D[Use staged files]
+  C -->|No| E[Select files]
+  E --> F[Stage selection]
+  D --> G[Build commit context]
+  F --> G
+  G --> H[Generate commit message]
+  H --> I{Choose action}
+  I -->|Commit| J[git commit]
+  I -->|Edit| K[Edit manually]
+  I -->|Regenerate| H
+  I -->|Refine| L[Apply instruction]
+  I -->|Copy| M[Copy message]
+  I -->|Cancel| N[Exit]
+  K --> J
+  L --> H
+```
+
+---
+
+## Configuration
+
+Edit:
 
 ```text
 src/config/config.ts
 ```
 
-Use it to configure:
-
-```text
-- LLM provider
-- reasoning and generation models
-- Git/context limits
-- commit-message constraints
-- staging prompt behavior
-- UI labels
-```
-
 Example:
 
 ```ts
+export const config = {
+  llm: {
+    provider: "openai",
+    reasoningModel: "gpt-4o-mini",
+    generationModel: "gpt-4o-mini",
+  },
+};
+```
+
+### OpenAI
+
+```bash
+export OPENAI_API_KEY="your_api_key"
+```
+
+### Ollama
+
+```ts
 llm: {
-  provider: "openai",
-  reasoningModel: "gpt-4o-mini",
-  generationModel: "gpt-4o-mini",
+  provider: "ollama",
+  reasoningModel: "llama3.1",
+  generationModel: "llama3.1",
 }
 ```
 
----
+Make sure Ollama is running:
 
-## LLM providers
-
-Providers live in:
-
-```text
-src/llm/
-  LLM.ts
-  index.ts
-  OpenAIProvider.ts
-  OllamaProvider.ts
-```
-
-`LLM.ts` defines the provider interface.  
-`index.ts` maps provider names to provider classes.
-
-To add a provider:
-
-```text
-1. Add the provider name to LLMProviderName
-2. Create a provider class implementing LLM
-3. Register it in src/llm/index.ts
-4. Select it in src/config/config.ts
+```bash
+ollama serve
 ```
 
 ---
 
-## Context strategy
+## Architecture
 
-`gcw` builds context from staged changes.
-
-```text
-Level 0: diff only
-Level 1: diff with surrounding context
-Level 2: full before/after file content
+```mermaid
+flowchart TB
+  CLI[index.ts] --> Core[core]
+  Core --> Git[git]
+  Core --> Staging[staging]
+  Core --> Context[context]
+  Core --> Commit[commit]
+  Commit --> LLM[llm]
+  Core --> UI[ui]
+  Core --> Config[config]
 ```
-
-Small files get full context. Larger files are reduced automatically.  
-Deleted files are represented without sending the removed content.
-
----
-
-## Project layout
 
 ```text
 src/
-  index.ts              CLI entrypoint
-  core/                 app orchestration
-  config/               central typed config
-  commit/               prompt and message generation
-  context/              staged-change context builder
-  git/                  Git wrapper and repo metadata
-  llm/                  provider interface and implementations
-  staging/              file selection and staging UI
-  types/                shared types
-  ui/                   generic UI helpers
+  index.ts      CLI entrypoint
+  core/         orchestration
+  git/          git status, diff, commit metadata
+  staging/      file selection and staging
+  context/      prompt context builder
+  commit/       commit message generation
+  llm/          OpenAI/Ollama providers
+  config/       runtime config
+  ui/           terminal UI helpers
 ```
 
 ---
 
-## Development
+## Scripts
 
 ```bash
-npm install
-npm run build
-node dist/index.js
+npm run build      # compile TypeScript
+npm run start      # run dist/index.js
+npm run lint       # lint project
+npm run lint:fix   # fix lint issues
+npm run check      # lint + build
+npm run clean      # remove dist
 ```
-
-Useful scripts:
-
-```bash
-npm run lint      # check lint and formatting rules
-npm run lint:fix  # auto-fix lint and formatting issues
-npm run check     # lint + build
-npm run clean     # remove dist/
-```
-
-Recommended `.gitignore`:
-
-```gitignore
-node_modules/
-dist/
-.DS_Store
-```
-
-`dist/` is generated and does not need to be committed.
 
 ---
 
-## Notes
+## Add a Provider
 
-- Uses staged Git changes for analysis.
-- Can stage selected files before generation.
-- Shows changed files as a tree with status icons and diff stats.
-- Uses a two-pass generation flow:
-  - extract dominant intent
-  - write final commit message
-- Keeps Git access inside `GitService`.
-- Keeps model access behind the `LLM` interface.
-- Keeps runtime behavior centralized in `config.ts`.
+Implement the `LLM` interface:
+
+```ts
+export interface LLM {
+  complete(prompt: string): Promise<string>;
+  stream(
+    prompt: string,
+    onText: (text: string) => void,
+  ): Promise<string>;
+}
+```
+
+Then register it in `src/llm/index.ts` and select it in `src/config/config.ts`.
+
+---
+
+## Privacy
+
+`gcw` sends staged Git context to the configured LLM provider.
+
+Before committing sensitive work, check what is staged:
+
+```bash
+git diff --staged
+```
+
+Do not stage secrets, tokens, credentials, private keys, or confidential data.
