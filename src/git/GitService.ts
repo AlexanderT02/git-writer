@@ -254,6 +254,43 @@ export class GitService {
     }
   }
 
+  gitRefExists(ref: string): boolean {
+    try {
+      this.runGit(["cat-file", "-e", ref]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  getCachedNameStatus(): string {
+    return this.runGitAllowEmpty(["diff", "--cached", "--name-status"]);
+  }
+
+  getCachedFileDiff(file: string): string {
+    return this.runGitAllowEmpty(["diff", "--cached", "--", file]);
+  }
+
+  getCachedFileDiffWithContext(file: string, contextLines: number): string {
+    return this.runGitAllowEmpty([
+      "diff",
+      "--cached",
+      `-U${contextLines}`,
+      "--",
+      file,
+    ]);
+  }
+
+  getFileFromGitRef(ref: string): string {
+    return this.runGitAllowEmpty(["show", ref], {
+      maxBuffer: this.config.context.maxFileBufferBytes,
+    });
+  }
+
+  getCachedFileNumstat(file: string): string {
+    return this.runGitAllowEmpty(["diff", "--cached", "--numstat", "--", file]);
+  }
+
   add(files: string[]): void {
     const result = spawnSync("git", ["add", "--", ...files], {
       encoding: "utf8",
