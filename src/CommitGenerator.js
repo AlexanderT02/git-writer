@@ -1,5 +1,5 @@
 import ora from "ora";
-import { UI } from "./ui.js";
+import { UI } from "./UI.js";
 
 export class CommitGenerator {
   constructor(ai) {
@@ -7,7 +7,6 @@ export class CommitGenerator {
     this.extraInstruction = "";
   }
 
-  // ── reasoning prompt (intent extraction) ──────────────────────────
   buildReasoningPrompt(files, context) {
     const {
       branch,
@@ -17,12 +16,11 @@ export class CommitGenerator {
       stagedFileSummaries,
       stagedStats,
       recentStyleHints,
-      fullFileContext,
+      fileContext,
       _diff,
     } = context;
 
-    // Sections are only injected when non-empty — no blank lines or
-    // orphaned labels wasting tokens.
+    // Keep the reasoning prompt focused on intent, not final wording.
     const sections = [
       `Branch: ${branch}${issue ? ` (${issue})` : ""}`,
       fileHints && `Technologies: ${fileHints}`,
@@ -31,36 +29,53 @@ export class CommitGenerator {
       stagedFileSummaries && `Staged files:\n${stagedFileSummaries}`,
       !stagedFileSummaries && `Staged files:\n${files}`,
       changedSymbols && `Changed symbols:\n${changedSymbols}`,
-      fullFileContext
-        ? `Full file context (before → after):\n${fullFileContext}`
+      fileContext
+        ? `File context:\n${fileContext}`
         : `Diff sketch:\n${_diff.split("\n").slice(0, 80).join("\n")}`,
     ]
       .filter(Boolean)
       .join("\n\n");
 
-    return `Analyse staged git changes and identify the dominant commit intent.
+    return `Analyze staged git changes and extract the commit intent.
 
-Return exactly this format:
+      Return exactly this format:
 
-TYPE: <feat|fix|refactor|perf|test|docs|chore|ci|build|revert>
-SCOPE: <single scope or NONE>
-INTENT: <one sentence>
-BULLETS:
-- <specific change>
-- <specific change>
-- <specific change>
+      TYPE: <feat|fix|refactor|perf|test|docs|chore|ci|build|revert>
+      SCOPE: <single lowercase scope or NONE>
+      INTENT: <one sentence describing the main user-visible or developer-facing effect>
+      WHY: <one sentence explaining why this change exists, or NONE>
+      RISK: <low|medium|high>
+      BULLETS:
+      - <specific changed behavior, structure, or file responsibility>
+      - <specific changed behavior, structure, or file responsibility>
+      - <specific changed behavior, structure, or file responsibility>
 
-Rules:
-- Pick the single dominant concern
-- Use a narrow scope if clear, otherwise NONE
-- Bullets must be concrete
-- No code fences
-- No markdown headings
+      Classification guide:
+      - feat: new user-visible or developer-facing capability
+      - fix: bug fix or incorrect behavior corrected
+      - refactor: code structure change without behavior change
+      - perf: measurable or intentional performance improvement
+      - test: test-only changes
+      - docs: documentation-only changes
+      - chore: tooling, maintenance, formatting, dependency, or config work
+      - ci: CI pipeline or workflow changes
+      - build: build system, packaging, or release configuration
+      - revert: reverts a previous commit
 
-${sections}`;
+      Rules:
+      - Pick exactly one dominant type
+      - Use feat or fix only when behavior changes
+      - Use refactor when behavior is preserved
+      - Use a narrow lowercase scope if obvious from files or symbols, otherwise NONE
+      - Do not use broad scopes like app, code, files, changes, misc
+      - Bullets must be concrete and traceable to staged changes
+      - Do not mention unstaged, untracked, or inferred changes
+      - No code fences
+      - No markdown headings
+
+      ${sections}`;
   }
 
-  // ── message prompt (final commit message) ─────────────────────────
   buildMessagePrompt(files, context, reasoning) {
     const {
       branch,
@@ -71,15 +86,17 @@ ${sections}`;
       recentStyleHints,
       stagedFileSummaries,
       stagedStats,
-      fullFileContext,
+      fileContext,
       _diff,
     } = context;
 
+    // Mention breaking changes only when the diff gives a real signal.
     const breakingHint =
       _diff.includes("BREAKING") || _diff.includes("breaking change")
         ? "Only include BREAKING CHANGE if a public API, schema, interface, or contract truly changed."
         : "";
 
+    // The final prompt adds style examples and optional user guidance.
     const sections = [
       `Branch: ${branch}${issue ? ` (${issue})` : ""}`,
       fileHints && `Technologies: ${fileHints}`,
@@ -90,40 +107,52 @@ ${sections}`;
       !stagedFileSummaries && `Staged files:\n${files}`,
       changedSymbols && `Changed symbols:\n${changedSymbols}`,
       this.extraInstruction && `User instruction: ${this.extraInstruction}`,
-      fullFileContext
-        ? `Full file context (before → after):\n${fullFileContext}`
+      fileContext
+        ? `File context:\n${fileContext}`
         : `Diff:\n${_diff}`,
     ]
       .filter(Boolean)
       .join("\n\n");
 
-    return `Write a Conventional Commit message from this analysis:
+    return `Write one Conventional Commit message using the analysis and staged context.
 
-${reasoning}
+      Analysis:
+      ${reasoning || "NONE"}
 
-Output format:
-<type>(<scope>): <summary>
+      Output exactly one commit message in this format:
 
-- <bullet>
-- <bullet>
+      <type>(<scope>): <summary>
 
-Optional:
-BREAKING CHANGE: <description>
+      - <bullet>
+      - <bullet>
 
-Rules:
-- Summary max 72 chars
-- Imperative mood
-- No trailing period
-- Scope only if helpful
-- Prefer 2 bullets, max 3
-- Bullets must be concrete and visible in staged changes
-- Do not invent behavior
-- Do not use vague words like: update, improve, change, misc, cleanup, various
-- Prefer verbs like: add, remove, extract, rename, validate, wire, split, replace, handle
-- Plain text only
-${breakingHint}
+      Optional footer:
+      BREAKING CHANGE: <description>
 
-${sections}`;
+      Rules:
+      - Use the TYPE and SCOPE from the analysis unless clearly contradicted by staged context
+      - Omit "(<scope>)" when SCOPE is NONE
+      - Summary must be <= 72 characters
+      - Summary must use imperative mood
+      - Summary must not end with a period
+      - Summary must describe the dominant change, not every detail
+      - Body should contain exactly 2 bullets unless 3 are needed
+      - Bullets must explain concrete changes visible in staged files
+      - Bullets must not repeat the summary
+      - Bullets must not mention file names unless the file name is important to understanding the change
+      - Do not invent behavior, motivation, tests, migration steps, or performance claims
+      - Do not use vague words: update, improve, change, misc, cleanup, various
+      - Prefer precise verbs: add, remove, extract, rename, validate, wire, split, replace, handle, guard, derive
+      - Plain text only
+      - No markdown headings
+      - No code fences
+
+      Breaking change rules:
+      - Include BREAKING CHANGE only if a public API, schema, CLI contract, config contract, database shape, or exported interface changed incompatibly
+      - Do not include BREAKING CHANGE for internal refactors, UI copy, formatting, or private helper changes
+      ${breakingHint}
+
+      ${sections}`;
   }
 
   sanitizeCommitMessage(message) {
@@ -139,7 +168,10 @@ ${sections}`;
     const spinner = ora("Analysing intent...").start();
 
     let reasoning = "";
+
     try {
+      // First pass extracts the dominant intent.
+      // If this fails, the final prompt can still work from raw context.
       reasoning = await this.ai.complete(
         this.buildReasoningPrompt(files, context),
       );
@@ -152,12 +184,14 @@ ${sections}`;
     const result = await this.ai.streamCompletion(
       this.buildMessagePrompt(files, context, reasoning),
       (text) => {
+        // Stop the spinner before rendering streamed output.
         spinner.stop();
         UI.render(text);
       },
     );
 
     spinner.stop();
+
     return this.sanitizeCommitMessage(result);
   }
 }
