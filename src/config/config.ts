@@ -73,7 +73,7 @@ export const config: AppConfig = {
   // LLM backend and models used by the two-pass generation flow.
   llm: {
     provider: "openai",
-    reasoningModel: "gpt-4o-mini",
+    reasoningModel: "gpt-5.4-mini",
     generationModel: "gpt-4o-mini",
   },
 
