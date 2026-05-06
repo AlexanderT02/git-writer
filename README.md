@@ -21,7 +21,7 @@ Interactive CLI for generating clean Conventional Commit messages from staged Gi
 ## Install
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/AlexanderT02/git-commit-writer.git
 cd git-commit-writer
 npm install
 npm run build
@@ -131,18 +131,6 @@ ollama serve
 ---
 
 ## Architecture
-
-```mermaid
-flowchart TB
-  CLI[index.ts] --> Core[core]
-  Core --> Git[git]
-  Core --> Staging[staging]
-  Core --> Context[context]
-  Core --> Commit[commit]
-  Commit --> LLM[llm]
-  Core --> UI[ui]
-  Core --> Config[config]
-```
 
 ```text
 src/
