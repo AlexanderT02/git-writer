@@ -4,10 +4,16 @@ A CLI that generates [Conventional Commit](https://www.conventionalcommits.org/)
 
 You stage your changes, run `gcw`, and get a properly formatted commit message. You can then commit it directly, edit it, regenerate, refine with instructions, or copy it to your clipboard.
 
+
+
+
 [![node](https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Conventional Commits](https://img.shields.io/badge/Conventional_Commits-1.0.0-FE5196?style=flat-square&logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
 
+![Select files to stage](assets/stage-files.svg)
+
+![Generated commit message](assets/generated-commit.svg)
 ---
 
 ## Features
