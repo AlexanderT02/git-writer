@@ -48,6 +48,7 @@ class TreeNode {
     const basename = parts.pop() ?? entry.file;
     let node: TreeNode = this;
 
+    // Create directory nodes on demand, then store the file at the leaf.
     for (const part of parts) {
       if (!node.children.has(part)) {
         node.children.set(part, new TreeNode(part));
@@ -68,6 +69,7 @@ class TreeNode {
       M: 4,
     };
 
+    // Keep related statuses grouped, then sort files alphabetically.
     this.files.sort(
       (a, b) =>
         (statusOrder[a.code] ?? 9) - (statusOrder[b.code] ?? 9) ||
@@ -89,6 +91,7 @@ class TreeNode {
     for (const [key, child] of [...this.children.entries()]) {
       child.collapse();
 
+      // Collapse single-child directory chains like src/main/java into one row.
       if (child.files.length === 0 && child.children.size === 1) {
         const [[grandKey, grandChild]] = [...child.children.entries()];
         this.children.delete(key);
@@ -148,6 +151,7 @@ const moveCursor = (
       next = 0;
     }
 
+    // Separators are not selectable, so navigation skips them.
     if (rows[next]?.type === "choice") return next;
     if (next === active) return active;
   }
@@ -184,6 +188,7 @@ const treeCheckbox = createPrompt<string[], TreeCheckboxConfig>(
         const row = rows[active];
         if (!row || row.type !== "choice") return;
 
+        // Use a new Set so Inquirer detects the state change.
         const next = new Set(selected);
         if (next.has(row.value)) {
           next.delete(row.value);
@@ -225,7 +230,7 @@ const treeCheckbox = createPrompt<string[], TreeCheckboxConfig>(
     const help =
       status === "idle"
         ? "\n" +
-          chalk.dim("  ↑/↓ bewegen · Space auswählen · Enter bestätigen") +
+          chalk.dim("  ↑/↓ move · Space select · Enter confirm") +
           "\n"
         : "";
 
@@ -250,9 +255,13 @@ export class StagingService {
       .map((line) => {
         const xy = line.slice(0, 2);
         const rest = line.slice(2).trim();
+
+        // Rename lines look like "old/path -> new/path"; stage the new path.
         const file = rest.includes(" -> ")
           ? rest.split(" -> ").pop()?.trim() ?? rest
           : rest;
+
+        // Prefer the worktree status, otherwise fall back to the index status.
         const code = xy[1] !== " " ? xy[1] ?? "" : xy[0] ?? "";
 
         return { file, code };
@@ -273,6 +282,7 @@ export class StagingService {
       try {
         raw = runNumstat(["diff", "--numstat", "HEAD"]);
       } catch {
+        // Repositories without HEAD need this fallback, for example before the first commit.
         raw = runNumstat(["diff", "--numstat"]);
       }
 
@@ -284,6 +294,7 @@ export class StagingService {
         const [add, del, ...nameParts] = line.split("\t");
         const name = nameParts.join("\t");
 
+        // Binary files report "-" for add/delete counts.
         if (add === "-") continue;
 
         stats.set(name, {
