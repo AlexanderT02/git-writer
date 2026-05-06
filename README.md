@@ -1,6 +1,6 @@
-# ai-commit
+# git-commit-writer
 
-Small interactive CLI tool that generates Conventional Commit messages from staged Git changes using OpenAI.
+`gcw` is a small interactive CLI tool that generates Conventional Commit messages from staged Git changes using OpenAI.
 
 It can stage files for you, inspect the staged diff, generate a commit message, and then let you commit, edit, regenerate, refine, or copy the result.
 
@@ -54,7 +54,7 @@ npm link
 ## Usage
 
 ```bash
-aic
+gcw
 ```
 
 The tool starts interactively. It shows changed files in a tree view and lets you choose which files to stage before generating a commit message.
@@ -71,10 +71,10 @@ Use arrow keys and Space to select files, then press Enter to confirm:
 
   ◯ ★ Stage all changes
 
-    src/
-  ◯  ├─ ± GitService.ts (+12/-4)
-  ●   ├─  + ContextBuilder.ts (+80)
-  ◯  └─  ? UI.ts
+  src/
+  ├─ ◯ ± GitService.ts (+12/-4)
+  ├─ ● + ContextBuilder.ts (+80)
+  └─ ◯ ? UI.ts
 ```
 
 Markers:
@@ -132,8 +132,8 @@ The tool regenerates the commit message using that instruction.
 Pass issue numbers directly as arguments:
 
 ```bash
-aic 123
-aic 42 99
+gcw 123
+gcw 42 99
 ```
 
 The final commit message will end with:

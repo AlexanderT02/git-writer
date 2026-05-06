@@ -1,8 +1,8 @@
 {
-  "name": "ai-commit",
+  "name": "git-commit-writer",
   "version": "1.0.0",
   "bin": {
-    "aic": "dist/index.js"
+    "gcw": "dist/index.js"
   },
   "type": "module",
   "dependencies": {
