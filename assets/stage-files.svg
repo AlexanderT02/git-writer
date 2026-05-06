@@ -1,0 +1,48 @@
+<svg width="900" height="280" viewBox="0 0 900 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .mono { font-family: "Cascadia Mono", "JetBrains Mono", "Fira Code", "Consolas", monospace; }
+      .text { fill: #e6edf3; }
+      .muted { fill: #7d8590; }
+      .blue { fill: #7dd3fc; }
+      .green { fill: #8ae88a; }
+      .line { stroke: #8b949e; stroke-width: 1.5; }
+    </style>
+  </defs>
+
+  <rect width="900" height="280" fill="#11161c"/>
+
+  <g transform="translate(18 34)">
+    <text x="0" y="0" class="mono blue" font-size="18">?</text>
+    <text x="18" y="0" class="mono text" font-size="18">Select files to stage</text>
+
+    <text x="18" y="26" class="mono muted" font-size="16">↑/↓ move · Space select · Enter confirm</text>
+
+    <text x="0" y="72" class="mono blue" font-size="18">❯</text>
+    <text x="26" y="72" class="mono muted" font-size="18">○</text>
+    <text x="52" y="72" class="mono blue" font-size="18">★</text>
+    <text x="80" y="72" class="mono blue" font-size="18">Stage all changes</text>
+
+    <text x="18" y="116" class="mono text" font-size="18">src/</text>
+
+    <path d="M22 130 V208" class="line"/>
+    <path d="M22 146 H38" class="line"/>
+    <path d="M22 184 H38" class="line"/>
+    <path d="M22 208 H38" class="line"/>
+
+    <text x="48" y="141" class="mono text" font-size="18">staging/</text>
+
+    <path d="M52 156 V184" class="line"/>
+    <path d="M52 166 H68" class="line"/>
+
+    <text x="78" y="170" class="mono muted" font-size="17">○ ? test2.yml</text>
+
+    <text x="48" y="192" class="mono muted" font-size="17">○ ? test.txt</text>
+    <text x="182" y="192" class="mono green" font-size="17">(+1)</text>
+
+    <text x="48" y="216" class="mono muted" font-size="17">○</text>
+    <text x="76" y="216" class="mono blue" font-size="17">→ README.md → src/README.md</text>
+    <text x="350" y="216" class="mono green" font-size="17">(+210)</text>
+    <text x="410" y="216" class="mono text" font-size="17">│</text>
+  </g>
+</svg>

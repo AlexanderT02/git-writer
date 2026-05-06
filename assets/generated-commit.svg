@@ -1,0 +1,52 @@
+<svg width="900" height="500" viewBox="0 0 900 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .mono { font-family: "Cascadia Mono", "JetBrains Mono", "Fira Code", "Consolas", monospace; }
+      .text { fill: #e6edf3; }
+      .muted { fill: #7d8590; }
+      .blue { fill: #7dd3fc; }
+      .line { stroke: #8b949e; stroke-width: 1.5; opacity: 0.9; }
+    </style>
+  </defs>
+
+  <rect width="900" height="500" fill="#11161c"/>
+
+  <g transform="translate(18 34)">
+    <line x1="0" y1="0" x2="620" y2="0" class="line"/>
+
+    <text x="20" y="26" class="mono text" font-size="18">Generated Commit</text>
+
+    <line x1="0" y1="48" x2="620" y2="48" class="line"/>
+
+    <text x="0" y="96" class="mono text" font-size="18">
+      docs: expand project README and add placeholder staging files
+    </text>
+
+    <text x="0" y="138" class="mono text" font-size="17">
+      - Moves the README into the src directory while retaining original content
+    </text>
+    <text x="0" y="162" class="mono text" font-size="17">
+      - Adds empty test and placeholder files for future staging and examples
+    </text>
+
+    <line x1="0" y1="204" x2="620" y2="204" class="line"/>
+
+    <text x="0" y="232" class="mono blue" font-size="18">?</text>
+    <text x="22" y="232" class="mono text" font-size="18">What do you want to do?</text>
+
+    <text x="0" y="258" class="mono blue" font-size="18">❯</text>
+    <text x="30" y="258" class="mono blue" font-size="18">Commit</text>
+
+    <text x="30" y="282" class="mono text" font-size="18">Edit message manually</text>
+    <text x="30" y="306" class="mono text" font-size="18">Regenerate</text>
+    <text x="30" y="330" class="mono text" font-size="18">Refine with instruction</text>
+    <text x="30" y="354" class="mono text" font-size="18">Copy to clipboard</text>
+
+    <line x1="10" y1="374" x2="150" y2="374" class="line"/>
+
+    <text x="20" y="400" class="mono text" font-size="18">✖ Cancel</text>
+
+    <text x="0" y="444" class="mono text" font-size="17">↑↓</text>
+    <text x="32" y="444" class="mono muted" font-size="17">navigate • ↵ select</text>
+  </g>
+</svg>
