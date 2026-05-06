@@ -42,7 +42,7 @@ export class App {
   }
 
   async run(): Promise<void> {
-     if (this.fastMode) {
+    if (this.fastMode) {
       return this.runFast();
     }
     while (true) {
