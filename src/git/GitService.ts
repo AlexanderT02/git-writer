@@ -45,10 +45,6 @@ export class GitService {
     };
   }
 
-  getStatus(): string {
-    return this.runGitOrEmpty(["status", "--porcelain"], { trim: false });
-  }
-
   getDetailedStatus(): string {
     return this.runGitOrEmpty(["status", "--porcelain=v1", "-uall"], {
       trim: false,
@@ -239,10 +235,14 @@ export class GitService {
   }
 
   commit(message: string): void {
-    spawnSync("git", ["commit", "-F", "-"], {
+    const result = spawnSync("git", ["commit", "-F", "-"], {
       input: message,
       encoding: "utf8",
       stdio: ["pipe", "ignore", "pipe"],
     });
+
+    if (result.status !== 0) {
+      throw new Error(result.stderr || "Failed to create commit");
+    }
   }
 }
