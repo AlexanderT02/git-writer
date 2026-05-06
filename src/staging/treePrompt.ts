@@ -351,15 +351,20 @@ function flattenNode(
       ? " " + formatStats(stats.add, stats.del)
       : "";
 
+    const label =
+      file.oldFile && file.code === "R"
+        ? `${normalizePath(file.oldFile)} → ${path}`
+        : file.basename;
+
     choices.push({
       type: "choice",
       value: path,
       render: ({ marker }) =>
         chalk.dim(prefix + connector) +
-        marker +
-        " " +
-        color(`${icon} ${file.basename}`) +
-        statsStr,
+    marker +
+    " " +
+    color(`${icon} ${label}`) +
+    statsStr,
     });
   });
 }

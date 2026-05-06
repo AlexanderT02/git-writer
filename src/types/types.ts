@@ -4,6 +4,7 @@ export interface StatusEntry {
   file: string;
   code: GitStatusCode;
   basename?: string;
+  oldFile?: string;
 }
 
 export interface StagedEntry {

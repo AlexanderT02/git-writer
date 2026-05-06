@@ -19,27 +19,135 @@ export class StagingService {
   parseStatusDetailed(): StatusEntry[] {
     const status = this.git.getDetailedStatus();
 
+    const entries = status
+      ? status
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => {
+          const xy = line.slice(0, 2);
+          const rest = line.slice(3).trim();
+
+          const file = rest.includes(" -> ")
+            ? rest.split(" -> ").pop()?.trim() ?? rest
+            : rest;
+
+          const code = xy[1] !== " " ? xy[1] ?? "" : xy[0] ?? "";
+
+          return {
+            file: normalizePath(file),
+            code,
+          };
+        })
+        .filter((entry) => entry.file && entry.file !== ".")
+      : [];
+
+    const stagedDeletes = this.getStagedDeleteEntries();
+
+    return this.coalesceMoves(this.dedupeEntries([...entries, ...stagedDeletes]));
+  }
+
+  private getStagedDeleteEntries(): StatusEntry[] {
+    const status = this.git.getCachedNameStatus();
+
     if (!status) return [];
 
     return status
       .split("\n")
       .filter(Boolean)
       .map((line) => {
-        const xy = line.slice(0, 2);
-        const rest = line.slice(3).trim();
-
-        const file = rest.includes(" -> ")
-          ? rest.split(" -> ").pop()?.trim() ?? rest
-          : rest;
-
-        const code = xy[1] !== " " ? xy[1] ?? "" : xy[0] ?? "";
+        const [code, ...parts] = line.trim().split(/\s+/);
+        const file = normalizePath(parts.join(" "));
 
         return {
-          file: normalizePath(file),
+          file,
           code,
         };
       })
-      .filter((entry) => entry.file && entry.file !== ".");
+      .filter((entry) => entry.code === "D" && entry.file && entry.file !== ".");
+  }
+
+  private dedupeEntries(entries: StatusEntry[]): StatusEntry[] {
+    const seen = new Set<string>();
+
+    return entries.filter((entry) => {
+      const key = `${entry.code}:${entry.file}:${entry.oldFile ?? ""}`;
+
+      if (seen.has(key)) return false;
+
+      seen.add(key);
+      return true;
+    });
+  }
+
+  private coalesceMoves(entries: StatusEntry[]): StatusEntry[] {
+    const deleted = entries.filter((entry) => entry.code === "D");
+    const added = entries.filter(
+      (entry) => entry.code === "?" || entry.code === "A",
+    );
+
+    const usedDeleted = new Set<string>();
+    const usedAdded = new Set<string>();
+    const moves: StatusEntry[] = [];
+
+    for (const add of added) {
+      const addBase = add.file.split("/").pop();
+
+      const match = deleted.find((del) => {
+        if (usedDeleted.has(del.file)) return false;
+
+        const delBase = del.file.split("/").pop();
+
+        return delBase === addBase;
+      });
+
+      if (!match) continue;
+
+      usedDeleted.add(match.file);
+      usedAdded.add(add.file);
+
+      moves.push({
+        code: "R",
+        oldFile: match.file,
+        file: add.file,
+      });
+    }
+
+    return [
+      ...entries.filter((entry) => {
+        if (entry.code === "D" && usedDeleted.has(entry.file)) {
+          return false;
+        }
+
+        if (
+          (entry.code === "?" || entry.code === "A") &&
+          usedAdded.has(entry.file)
+        ) {
+          return false;
+        }
+
+        return true;
+      }),
+      ...moves,
+    ];
+  }
+
+  private expandStageFiles(files: StatusEntry[], selectedFiles: string[]): string[] {
+    const selectedSet = new Set(selectedFiles.map(normalizePath));
+    const stageFiles = new Set<string>();
+
+    for (const file of files) {
+      const path = normalizePath(file.file);
+
+      if (!selectedSet.has(path)) continue;
+
+      if (file.oldFile) {
+        stageFiles.add(normalizePath(file.oldFile));
+      }
+
+      stageFiles.add(path);
+    }
+
+    return [...stageFiles];
   }
 
   getDiffStats(files: StatusEntry[]): Map<string, DiffStats> {
@@ -71,7 +179,7 @@ export class StagingService {
 
       if (stats.has(path)) continue;
 
-      if (file.code === "?" || file.code === "A") {
+      if (file.code === "?" || file.code === "A" || file.code === "R") {
         const add = this.countTextFileLines(path);
 
         if (add > 0) {
@@ -166,7 +274,7 @@ export class StagingService {
     }
 
     if (selected.includes("__ALL__")) {
-      this.git.add(files.map((file) => normalizePath(file.file)));
+      this.git.add(this.expandStageFiles(files, files.map((file) => file.file)));
 
       console.log(
         chalk.green(
@@ -184,7 +292,7 @@ export class StagingService {
       process.exit(0);
     }
 
-    this.git.add(selected.map(normalizePath));
+    this.git.add(this.expandStageFiles(files, selected));
 
     console.log(
       chalk.green(
