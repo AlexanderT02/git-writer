@@ -1,16 +1,20 @@
 # git-commit-writer
 
-`gcw` is a small interactive CLI tool that helps write Conventional Commit messages from staged Git changes.
+`gcw` is a small interactive CLI that writes Conventional Commit messages from staged Git changes.
 
-It can stage files, inspect the staged diff, build compact commit context, generate a commit message through a configurable LLM provider, and then let you commit, edit, regenerate, refine, or copy the result.
+It can stage files, build compact Git context, ask a configurable LLM provider for a commit message, and then let you commit, edit, regenerate, refine, or copy the result.
 
 ---
 
-## Setup
+## Install
 
-### 1. Set your provider API key
+```bash
+npm install
+npm run build
+npm link
+```
 
-For the default OpenAI provider:
+Set your provider key.
 
 ```bash
 # Windows PowerShell
@@ -23,35 +27,7 @@ setx OPENAI_API_KEY "your_api_key"
 export OPENAI_API_KEY="your_api_key"
 ```
 
-After using `setx` on Windows, restart your terminal.
-
-If you switch to another provider, configure the required credentials for that provider.
-
----
-
-### 2. Install dependencies
-
-```bash
-npm install
-```
-
----
-
-### 3. Build the TypeScript project
-
-```bash
-npm run build
-```
-
-This creates the compiled CLI in `dist/`.
-
----
-
-### 4. Link the CLI globally
-
-```bash
-npm link
-```
+Restart your terminal after using `setx`.
 
 ---
 
@@ -61,13 +37,7 @@ npm link
 gcw
 ```
 
-The tool starts interactively. It shows changed files in a tree view and lets you choose which files to stage before generating a commit message.
-
----
-
-## File Selection
-
-Use arrow keys and Space to select files, then press Enter to confirm:
+`gcw` opens an interactive flow:
 
 ```text
 ? Select files to stage
@@ -88,7 +58,7 @@ Markers:
 ● selected
 ```
 
-Git status icons:
+Status icons:
 
 ```text
 ± modified
@@ -98,19 +68,17 @@ Git status icons:
 ? untracked
 ```
 
-If files are already staged, the menu also shows:
+If files are already staged, you can select:
 
 ```text
 ◯ ↳ use already staged files
 ```
 
-Select it to skip staging and generate a message from the existing staged changes.
-
 ---
 
-## Controls after generation
+## After generation
 
-After the commit message is generated, choose an action from the menu:
+Choose what to do with the generated commit message:
 
 ```text
 Commit
@@ -121,26 +89,24 @@ Copy to clipboard
 Cancel
 ```
 
-### Refine example
+Example refine instruction:
 
 ```text
 Focus on the TypeScript migration
 ```
 
-The tool regenerates the commit message using that instruction.
-
 ---
 
-## Issue References
+## Issue references
 
-Pass issue numbers directly as arguments:
+Pass issue numbers directly:
 
 ```bash
 gcw 123
 gcw 42 99
 ```
 
-The final commit message will end with:
+This appends:
 
 ```text
 refs #123
@@ -152,37 +118,31 @@ or:
 refs #42, #99
 ```
 
-The tool can also infer an issue from the branch name, for example:
+If no issue is passed, `gcw` can infer one from the branch name:
 
 ```text
-feature/123-login
-```
-
-becomes:
-
-```text
-#123
+feature/123-login -> #123
 ```
 
 ---
 
-## Configuration
+## Config
 
-Project behavior is centralized in:
+Runtime behavior lives in:
 
 ```text
 src/config/config.ts
 ```
 
-Use this file to change:
+Change this file to configure:
 
 ```text
-- active LLM provider
+- LLM provider
 - reasoning and generation models
-- Git context limits
+- Git/context limits
 - commit-message constraints
-- staging prompt options
-- UI labels and rendering behavior
+- staging prompt behavior
+- UI labels
 ```
 
 Example:
@@ -195,13 +155,11 @@ llm: {
 }
 ```
 
-To switch providers, update the provider in config and ensure the provider exists in `src/llm/`.
-
 ---
 
-## LLM Providers
+## LLM providers
 
-LLM access is isolated behind a small provider interface:
+Providers live in:
 
 ```text
 src/llm/
@@ -211,24 +169,23 @@ src/llm/
   OllamaProvider.ts
 ```
 
-The rest of the app does not depend directly on OpenAI or any other provider.
+`LLM.ts` defines the small interface used by the app.  
+`index.ts` maps provider names to provider classes.
 
-To add a new provider:
+To add a provider:
 
 ```text
-1. Create a provider class in src/llm/
-2. Implement the LLM interface
-3. Register/select it in src/llm/index.ts
-4. Set it in src/config/config.ts
+1. Add ProviderName to LLMProviderName in config.ts
+2. Create a provider class implementing LLM
+3. Add it to the provider map in src/llm/index.ts
+4. Select it in config.ts
 ```
 
 ---
 
-## How context is built
+## Context strategy
 
-The tool uses staged Git changes as input.
-
-For each staged file, it chooses the richest context that still fits the context budget:
+`gcw` builds context from staged changes.
 
 ```text
 Level 0: diff only
@@ -236,79 +193,34 @@ Level 1: diff with surrounding context
 Level 2: full before/after file content
 ```
 
-Small files receive full context. Larger files are reduced automatically.
-
-Deleted files are represented as deleted without sending the full removed content. This keeps prompts focused and avoids wasting context budget.
+Small files get full context. Larger files are reduced automatically.  
+Deleted files are represented as deleted without sending the removed content.
 
 ---
 
-## Architecture
-
-The project is split by responsibility:
+## Project layout
 
 ```text
 src/
   index.ts              CLI entrypoint
   core/                 app orchestration
-  config/               central typed configuration
-  commit/               prompt building and commit-message generation
-  context/              staged-change context building
-  git/                  Git command wrapper and repository metadata
-  llm/                  provider abstraction and provider implementations
+  config/               central typed config
+  commit/               prompt and commit-message generation
+  context/              staged-change context builder
+  git/                  Git wrapper and repo metadata
+  llm/                  provider abstraction and implementations
   staging/              file selection and staging UI
-  types/                shared TypeScript types
-  ui/                   generic interactive UI helpers
-```
-
----
-
-## Project files
-
-```text
-package-lock.json
-package.json
-README.md
-tsconfig.json
-src/
-  index.ts
-  core/
-    App.ts
-  config/
-    config.ts
-  commit/
-    CommitGenerator.ts
-  context/
-    ContextBuilder.ts
-  git/
-    GitService.ts
-  llm/
-    index.ts
-    LLM.ts
-    OllamaProvider.ts
-    OpenAIProvider.ts
-  staging/
-    StagingService.ts
-    treePrompt.ts
-  types/
-    types.ts
-  ui/
-    UI.ts
+  types/                shared types
+  ui/                   generic UI helpers
 ```
 
 ---
 
 ## Development
 
-Install and build:
-
 ```bash
 npm install
 npm run build
-```
-
-Run without linking:
-
-```bash
 node dist/index.js
 ```
 
@@ -323,11 +235,10 @@ Recommended `.gitignore`:
 ```gitignore
 node_modules/
 dist/
-.env
 .DS_Store
 ```
 
-`dist/` is generated by `npm run build` and does not need to be committed.
+`dist/` is generated and does not need to be committed.
 
 ---
 
@@ -337,8 +248,8 @@ dist/
 - Can stage selected files before generation.
 - Shows changed files as a tree with status icons and diff stats.
 - Uses a two-pass generation flow:
-  - first pass extracts dominant intent
-  - second pass writes the final commit message
+  - extract dominant intent
+  - write final commit message
 - Keeps Git access inside `GitService`.
-- Keeps model access behind the `LLM` provider interface.
+- Keeps model access behind the `LLM` interface.
 - Keeps runtime behavior centralized in `config.ts`.
