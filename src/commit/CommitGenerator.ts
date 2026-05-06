@@ -35,9 +35,9 @@ export class CommitGenerator {
       fileContext
         ? `File context:\n${fileContext}`
         : `Diff sketch:\n${(_diff || "")
-            .split("\n")
-            .slice(0, this.config.commit.reasoningDiffPreviewLines)
-            .join("\n")}`,
+          .split("\n")
+          .slice(0, this.config.commit.reasoningDiffPreviewLines)
+          .join("\n")}`,
     ]
       .filter(Boolean)
       .join("\n\n");

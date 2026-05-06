@@ -28,8 +28,8 @@ export class ContextBuilder {
     const recentStyleHints =
       fileCount > 3
         ? this.gitService.getRecentCommitStyleHints(
-            this.config.git.recentStyleCommitCount,
-          )
+          this.config.git.recentStyleCommitCount,
+        )
         : "";
 
     const fileContexts = this.buildFileContexts();
@@ -141,9 +141,9 @@ export class ContextBuilder {
 
     return diff
       ? {
-          level: 1,
-          text: `=== ${entry.file} (${entry.status}) [diff +context] ===\n${diff}`,
-        }
+        level: 1,
+        text: `=== ${entry.file} (${entry.status}) [diff +context] ===\n${diff}`,
+      }
       : this.level0(entry);
   }
 

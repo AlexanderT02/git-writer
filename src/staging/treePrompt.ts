@@ -45,26 +45,32 @@ export class TreeNode {
   constructor(readonly name: string) {}
 
   insert(entry: StatusEntry): void {
-    const cleanFile = normalizePath(entry.file);
-    const parts = cleanFile.split("/").filter(Boolean);
-    const basename = parts.pop() ?? cleanFile;
-    let node: TreeNode = this;
+    this.insertAt(entry, normalizePath(entry.file).split("/").filter(Boolean));
+  }
 
-    for (const part of parts) {
-      if (!node.children.has(part)) {
-        node.children.set(part, new TreeNode(part));
-      }
+  private insertAt(entry: StatusEntry, parts: string[]): void {
+    const [part, ...rest] = parts;
 
-      node = node.children.get(part)!;
+    if (!part) return;
+
+    if (rest.length === 0) {
+      this.files.push({
+        ...entry,
+        file: normalizePath(entry.file),
+        basename: part,
+      });
+
+      return;
     }
 
-    if (!basename) return;
+    let child = this.children.get(part);
 
-    node.files.push({
-      ...entry,
-      file: cleanFile,
-      basename,
-    });
+    if (!child) {
+      child = new TreeNode(part);
+      this.children.set(part, child);
+    }
+
+    child.insertAt(entry, rest);
   }
 
   sort(): void {

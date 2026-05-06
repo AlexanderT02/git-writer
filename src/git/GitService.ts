@@ -182,8 +182,8 @@ export class GitService {
       types.size ? `Recent commit types: ${[...types].join(", ")}` : "",
       scopes.size
         ? `Recent scopes: ${[...scopes]
-            .slice(0, this.config.git.maxRecentScopes)
-            .join(", ")}`
+          .slice(0, this.config.git.maxRecentScopes)
+          .join(", ")}`
         : "",
     ]
       .filter(Boolean)
