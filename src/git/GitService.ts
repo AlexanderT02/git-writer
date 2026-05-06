@@ -6,25 +6,57 @@ import type { BranchContext, CommitStats } from "../types/types.js";
 export class GitService {
   constructor(private readonly config: AppConfig) {}
 
-  private git(args: string[], maxBuffer = this.config.git.maxBufferBytes): string {
-    return execFileSync("git", args, {
+  runGit(args: string[], options?: { trim?: boolean; maxBuffer?: number }): string {
+    const trim = options?.trim ?? true;
+    const maxBuffer = options?.maxBuffer ?? this.config.git.maxBufferBytes;
+
+    const output = execFileSync("git", args, {
       encoding: "utf8",
       maxBuffer,
       stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
+    });
+
+    // Do not trim leading spaces for porcelain output.
+    // Git status uses leading spaces as part of the status code.
+    return trim ? output.trim() : output.replace(/\r?\n$/, "");
+  }
+
+  runGitAllowEmpty(
+    args: string[],
+    options?: { trim?: boolean; maxBuffer?: number },
+  ): string {
+    try {
+      return this.runGit(args, options);
+    } catch {
+      return "";
+    }
   }
 
   getBranch(): string {
-    return this.git(["rev-parse", "--abbrev-ref", "HEAD"]);
+    return this.runGit(["rev-parse", "--abbrev-ref", "HEAD"]);
   }
 
   getStatus(): string {
-    return this.git(["status", "--porcelain"]);
+    return this.runGit(["status", "--porcelain"], { trim: false });
+  }
+
+  getDetailedStatus(): string {
+    return this.runGit(["status", "--porcelain=v1", "-uall"], {
+      trim: false,
+    });
+  }
+
+  getCachedNumstat(): string {
+    return this.runGitAllowEmpty(["diff", "--cached", "--numstat"]);
+  }
+
+  getWorkingTreeNumstat(): string {
+    return this.runGitAllowEmpty(["diff", "--numstat"]);
   }
 
   getLastCommitSummary(): CommitStats | null {
     try {
-      const output = this.git(["show", "--shortstat", "-1"]);
+      const output = this.runGit(["show", "--shortstat", "-1"]);
       const match = output.match(
         /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/,
       );
@@ -42,12 +74,12 @@ export class GitService {
   }
 
   getStagedFiles(): string {
-    return this.git(["diff", "--cached", "--name-only"]);
+    return this.runGit(["diff", "--cached", "--name-only"]);
   }
 
   getStagedFileSummaries(): string {
     try {
-      const status = this.git(["diff", "--cached", "--name-status"]);
+      const status = this.runGit(["diff", "--cached", "--name-status"]);
 
       if (!status) return "";
 
@@ -65,7 +97,7 @@ export class GitService {
 
   getStagedStats(): string {
     try {
-      return this.git(["diff", "--cached", "--shortstat"]);
+      return this.runGit(["diff", "--cached", "--shortstat"]);
     } catch {
       return "";
     }
@@ -73,7 +105,7 @@ export class GitService {
 
   getRecentCommits(n = this.config.git.recentCommitCount): string {
     try {
-      return this.git(["log", "--oneline", `-${n}`, "--no-merges"]);
+      return this.runGit(["log", "--oneline", `-${n}`, "--no-merges"]);
     } catch {
       return "";
     }
@@ -83,7 +115,7 @@ export class GitService {
     n = this.config.git.recentStyleCommitCount,
   ): string {
     try {
-      const commits = this.git(["log", "--format=%s", `-${n}`, "--no-merges"]);
+      const commits = this.runGit(["log", "--format=%s", `-${n}`, "--no-merges"]);
 
       if (!commits) return "";
 
@@ -177,7 +209,7 @@ export class GitService {
 
   getChangedSymbols(): string {
     try {
-      const raw = this.git(["diff", "--cached", "--unified=0"]);
+      const raw = this.runGit(["diff", "--cached", "--unified=0"]);
       const symbols = new Set<string>();
       const hunkHeader = /^@@[^@]+@@\s*(.+)$/gm;
       let match: RegExpExecArray | null;
@@ -199,7 +231,7 @@ export class GitService {
   }
 
   getDiff(): string {
-    const raw = this.git(["diff", "--cached"]);
+    const raw = this.runGit(["diff", "--cached"]);
     const lines = raw.split("\n");
 
     if (lines.length <= this.config.git.largeDiffLineLimit) {
@@ -209,8 +241,8 @@ export class GitService {
     console.log(chalk.yellow("⚠ Large diff — semantic summary mode\n"));
 
     try {
-      const stat = this.git(["diff", "--cached", "--stat"]);
-      const headers = this.git(["diff", "--cached", "--unified=0"])
+      const stat = this.runGit(["diff", "--cached", "--stat"]);
+      const headers = this.runGit(["diff", "--cached", "--unified=0"])
         .split("\n")
         .filter((line) => line.startsWith("+++") || line.startsWith("@@"))
         .slice(0, this.config.git.largeDiffHeaderLimit)
@@ -218,7 +250,7 @@ export class GitService {
 
       return `[CHANGED FILES]\n${stat}\n\n[CHANGED SYMBOLS & HUNKS]\n${headers}`;
     } catch {
-      return this.git(["diff", "--cached", "--stat"]);
+      return this.runGit(["diff", "--cached", "--stat"]);
     }
   }
 
