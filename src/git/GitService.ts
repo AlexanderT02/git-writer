@@ -205,57 +205,6 @@ export class GitService {
     };
   }
 
-  // Hints for prompts
-
-  getFileTypeHints(stagedFiles: string): string {
-    const files = stagedFiles
-      .split("\n")
-      .map((file) => file.trim())
-      .filter(Boolean);
-
-    const hints = new Set<string>();
-
-    const extMap: Record<string, string> = {
-      ".java": "Java",
-      ".kt": "Kotlin",
-      ".scala": "Scala",
-      ".ts": "TypeScript",
-      ".tsx": "TypeScript/React",
-      ".js": "JavaScript",
-      ".jsx": "JavaScript/React",
-      ".py": "Python",
-      ".go": "Go",
-      ".rs": "Rust",
-      ".rb": "Ruby",
-      ".php": "PHP",
-      ".cs": "C#",
-      ".cpp": "C++",
-      ".c": "C",
-      ".swift": "Swift",
-    };
-
-    for (const file of files) {
-      for (const [ext, lang] of Object.entries(extMap)) {
-        if (file.endsWith(ext)) {
-          hints.add(lang);
-        }
-      }
-
-      if (/[Tt]est|[Ss]pec/.test(file)) hints.add("includes tests");
-      if (/migration/i.test(file)) hints.add("includes DB migration");
-      if (file.endsWith(".md") || file.endsWith(".mdx")) hints.add("includes docs");
-      if (/Dockerfile|docker-compose/i.test(file)) hints.add("Docker config");
-      if (/\.ya?ml$/i.test(file) && /ci|github|gitlab|pipeline/i.test(file)) {
-        hints.add("CI config");
-      }
-      if (/pom\.xml|build\.gradle|package\.json|Cargo\.toml|go\.mod/i.test(file)) {
-        hints.add("build/dep file");
-      }
-    }
-
-    return [...hints].join(", ");
-  }
-
   getChangedSymbols(): string {
     const raw = this.runGitOrEmpty(["diff", "--cached", "--unified=0"]);
     const symbols = new Set<string>();
