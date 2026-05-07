@@ -394,6 +394,7 @@ export class App {
     },
   ): UsageEntry {
     const lineStats = this.extractLineStats(meta.diff);
+    const llmCalls = this.buildLLMCalls(meta.usage);
 
     return {
       timestamp: new Date().toISOString(),
@@ -402,19 +403,13 @@ export class App {
       reasoningModel: config.llm.reasoningModel,
       generationModel: config.llm.generationModel,
 
+      llmCalls,
+
       usedTokens: meta.usedTokens,
-      inputTokens:
-      (meta.usage.reasoning?.inputTokens ?? 0) +
-      (meta.usage.generation?.inputTokens ?? 0),
-      outputTokens:
-      (meta.usage.reasoning?.outputTokens ?? 0) +
-      (meta.usage.generation?.outputTokens ?? 0),
-      reasoningTokens:
-      (meta.usage.reasoning?.reasoningTokens ?? 0) +
-      (meta.usage.generation?.reasoningTokens ?? 0),
-      cachedTokens:
-      (meta.usage.reasoning?.cachedTokens ?? 0) +
-      (meta.usage.generation?.cachedTokens ?? 0),
+      inputTokens: llmCalls.reduce((sum, call) => sum + call.tokens.inputTokens, 0),
+      outputTokens: llmCalls.reduce((sum, call) => sum + call.tokens.outputTokens, 0),
+      reasoningTokens: this.sumOptionalTokenField(llmCalls, "reasoningTokens"),
+      cachedTokens: this.sumOptionalTokenField(llmCalls, "cachedTokens"),
 
       fileCount: this.countFiles(command, meta.files ?? meta.diff),
       changedLines: lineStats.additions + lineStats.deletions,
@@ -476,5 +471,54 @@ export class App {
     if (estimatedTokens <= warningThreshold) return;
 
     UI.renderTokenEstimate(estimatedTokens, "Large PR token estimate");
+  }
+
+  private buildLLMCalls(usage: GenerationUsage): UsageEntry["llmCalls"] {
+    const calls: UsageEntry["llmCalls"] = [];
+
+    if (usage.reasoning) {
+      calls.push({
+        role: "reasoning",
+        provider: config.llm.provider,
+        model: config.llm.reasoningModel,
+        tokens: {
+          inputTokens: usage.reasoning.inputTokens,
+          outputTokens: usage.reasoning.outputTokens,
+          totalTokens: usage.reasoning.totalTokens,
+          reasoningTokens: usage.reasoning.reasoningTokens,
+          cachedTokens: usage.reasoning.cachedTokens,
+        },
+        success: true,
+      });
+    }
+
+    if (usage.generation) {
+      calls.push({
+        role: "generation",
+        provider: config.llm.provider,
+        model: config.llm.generationModel,
+        tokens: {
+          inputTokens: usage.generation.inputTokens,
+          outputTokens: usage.generation.outputTokens,
+          totalTokens: usage.generation.totalTokens,
+          reasoningTokens: usage.generation.reasoningTokens,
+          cachedTokens: usage.generation.cachedTokens,
+        },
+        success: true,
+      });
+    }
+
+    return calls;
+  }
+
+  private sumOptionalTokenField(
+    calls: UsageEntry["llmCalls"],
+    field: "reasoningTokens" | "cachedTokens",
+  ): number | undefined {
+    const total = calls.reduce((sum, call) => {
+      return sum + (call.tokens[field] ?? 0);
+    }, 0);
+
+    return total > 0 ? total : undefined;
   }
 }

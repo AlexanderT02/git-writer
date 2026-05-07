@@ -133,17 +133,41 @@ export type PullRequestCreateResult =
     message: string;
   };
 
+export type UsageCommand = "commit" | "pr";
+
+export type LLMCallRole = "reasoning" | "generation";
+
+export interface UsageTokenDetails {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  reasoningTokens?: number;
+  cachedTokens?: number;
+}
+
+export interface UsageLLMCall {
+  role: LLMCallRole;
+  provider: string;
+  model: string;
+  tokens: UsageTokenDetails;
+  durationMs?: number;
+  success: boolean;
+  errorCode?: string;
+}
+
 export interface UsageEntry {
   timestamp: string;
-  command: "commit" | "pr";
+  command: UsageCommand;
 
   provider: string;
   reasoningModel: string;
   generationModel: string;
 
+  llmCalls: UsageLLMCall[];
+
   usedTokens: number;
-  inputTokens?: number;
-  outputTokens?: number;
+  inputTokens: number;
+  outputTokens: number;
   reasoningTokens?: number;
   cachedTokens?: number;
 

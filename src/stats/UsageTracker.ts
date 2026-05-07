@@ -205,28 +205,58 @@ export class UsageTracker {
 
     const entry = value as Partial<UsageEntry>;
 
-    // Required fields must exist and have the expected shape.
-    // Optional metric fields are accepted only when they are finite numbers.
     return (
       typeof entry.timestamp === "string" &&
-      (entry.command === "commit" || entry.command === "pr") &&
-      typeof entry.provider === "string" &&
-      typeof entry.reasoningModel === "string" &&
-      typeof entry.generationModel === "string" &&
-      this.isFiniteNumber(entry.usedTokens) &&
-      this.isFiniteNumber(entry.fileCount) &&
-      typeof entry.branch === "string" &&
-      typeof entry.success === "boolean" &&
-      this.isOptionalFiniteNumber(entry.inputTokens) &&
-      this.isOptionalFiniteNumber(entry.outputTokens) &&
-      this.isOptionalFiniteNumber(entry.reasoningTokens) &&
-      this.isOptionalFiniteNumber(entry.cachedTokens) &&
-      this.isOptionalFiniteNumber(entry.changedLines) &&
-      this.isOptionalFiniteNumber(entry.additions) &&
-      this.isOptionalFiniteNumber(entry.deletions) &&
-      this.isOptionalFiniteNumber(entry.durationMs) &&
-      this.isOptionalString(entry.errorCode) &&
-      this.isOptionalBoolean(entry.fastMode)
+        (entry.command === "commit" || entry.command === "pr") &&
+        typeof entry.provider === "string" &&
+        typeof entry.reasoningModel === "string" &&
+        typeof entry.generationModel === "string" &&
+        Array.isArray(entry.llmCalls) &&
+        entry.llmCalls.every((call) => this.isUsageLLMCall(call)) &&
+        this.isFiniteNumber(entry.usedTokens) &&
+        this.isFiniteNumber(entry.inputTokens) &&
+        this.isFiniteNumber(entry.outputTokens) &&
+        typeof entry.branch === "string" &&
+        typeof entry.success === "boolean" &&
+        this.isFiniteNumber(entry.fileCount) &&
+        this.isOptionalFiniteNumber(entry.reasoningTokens) &&
+        this.isOptionalFiniteNumber(entry.cachedTokens) &&
+        this.isOptionalFiniteNumber(entry.changedLines) &&
+        this.isOptionalFiniteNumber(entry.additions) &&
+        this.isOptionalFiniteNumber(entry.deletions) &&
+        this.isOptionalFiniteNumber(entry.durationMs) &&
+        this.isOptionalString(entry.errorCode) &&
+        this.isOptionalBoolean(entry.fastMode)
+    );
+  }
+
+  private isUsageLLMCall(value: unknown): value is UsageEntry["llmCalls"][number] {
+    if (!value || typeof value !== "object") return false;
+
+    const call = value as Partial<UsageEntry["llmCalls"][number]>;
+
+    return (
+      (call.role === "reasoning" || call.role === "generation") &&
+        typeof call.provider === "string" &&
+        typeof call.model === "string" &&
+        this.isUsageTokenDetails(call.tokens) &&
+        typeof call.success === "boolean" &&
+        this.isOptionalFiniteNumber(call.durationMs) &&
+        this.isOptionalString(call.errorCode)
+    );
+  }
+
+  private isUsageTokenDetails(value: unknown): value is UsageEntry["llmCalls"][number]["tokens"] {
+    if (!value || typeof value !== "object") return false;
+
+    const tokens = value as Partial<UsageEntry["llmCalls"][number]["tokens"]>;
+
+    return (
+      this.isFiniteNumber(tokens.inputTokens) &&
+        this.isFiniteNumber(tokens.outputTokens) &&
+        this.isFiniteNumber(tokens.totalTokens) &&
+        this.isOptionalFiniteNumber(tokens.reasoningTokens) &&
+        this.isOptionalFiniteNumber(tokens.cachedTokens)
     );
   }
 
