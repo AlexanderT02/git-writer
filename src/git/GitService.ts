@@ -224,7 +224,7 @@ export class GitService {
       .slice(0, this.config.git.maxChangedSymbols)
       .join("\n");
   }
-  
+
   fetchRemoteBranches(): void {
     this.runGitOrEmpty(["fetch", "--all", "--prune"], {
       maxBuffer: this.config.git.maxBufferBytes,
@@ -288,6 +288,86 @@ export class GitService {
         summary.insertions > 0 ||
         summary.deletions > 0,
       );
+  }
+
+  ensureGitHubCliReady(): void {
+    const versionResult = spawnSync("gh", ["--version"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    if (versionResult.status !== 0) {
+      throw new Error(
+        "GitHub CLI is not installed or not available in PATH. Install it with: scoop install gh",
+      );
+    }
+
+    const authResult = spawnSync("gh", ["auth", "status"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    if (authResult.status !== 0) {
+      throw new Error(
+        "GitHub CLI is installed but not authenticated. Run: gh auth login",
+      );
+    }
+  }
+
+  createPullRequestViaGithubCli(baseBranch: string, title: string, body: string): string {
+    this.ensureGitHubCliReady();
+    this.ensureCurrentBranchHasUpstream();
+
+    const normalizedBaseBranch = baseBranch.replace(/^origin\//, "");
+   
+    const result = spawnSync(
+      "gh",
+      [
+        "pr",
+        "create",
+        "--base",
+        normalizedBaseBranch,
+        "--title",
+        title,
+        "--body",
+        body,
+      ],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    if (result.status !== 0) {
+      throw new Error(result.stderr || "Failed to create pull request via GitHub CLI");
+    }
+
+    return result.stdout.trim();
+  }
+
+  hasUpstreamBranch(): boolean {
+    const result = spawnSync(
+      "git",
+      ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    return result.status === 0;
+  }
+
+  ensureCurrentBranchHasUpstream(): void {
+    if (this.hasUpstreamBranch()) {
+      return;
+    }
+
+    const branch = this.getBranch();
+
+    throw new Error(
+      `Current branch "${branch}" has no upstream branch. Push it first with: git push -u origin ${branch}`,
+    );
   }
 
   // Mutations

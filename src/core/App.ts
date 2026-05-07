@@ -149,6 +149,13 @@ export class App {
       }
 
       if (action === "create") {
+        const url = this.git.createPullRequestViaGithubCli(
+          selectedBaseBranch,
+          title,
+          description,
+        );
+
+        UI.renderPRCreated(url);
         process.exit(0);
       }
 

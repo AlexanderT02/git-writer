@@ -189,4 +189,13 @@ export class UI {
   static renderMarkdown(markdown: string): void {
     console.log(marked(markdown));
   }
+
+  static renderPRCreated(url: string): void {
+    console.log(chalk.green("\n✔ Pull request created\n"));
+
+    if (url) {
+      console.log(chalk.cyan(url));
+      console.log("");
+    }
+  }
 }
