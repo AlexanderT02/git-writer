@@ -1,41 +1,7 @@
 import { spawnSync } from "child_process";
 import type { GitService } from "./GitService.js";
-
-export type PullRequestCreateResult =
-  | {
-    status: "created";
-    url: string;
-  }
-  | {
-    status: "already_exists";
-    url: string | null;
-    message: string;
-  }
-  | {
-    status: "not_pushed";
-    message: string;
-    suggestedCommand: string;
-  }
-  | {
-    status: "unpushed_commits";
-    message: string;
-    suggestedCommand: string;
-  }
-  | {
-    status: "gh_missing";
-    message: string;
-  }
-  | {
-    status: "gh_unauthenticated";
-    message: string;
-    suggestedCommand: string;
-  }
-  | {
-    status: "failed";
-    message: string;
-  };
-
-type CommandResult = {
+import type { PullRequestCreateResult } from "../types/types.js";
+export type CommandResult = {
   status: number | null;
   stdout: string;
   stderr: string;
