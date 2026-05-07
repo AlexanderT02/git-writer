@@ -290,18 +290,36 @@ export class GitService {
       );
   }
 
-  hasGitHubCli(): boolean {
-    const result = spawnSync("gh", ["--version"], {
+  ensureGitHubCliReady(): void {
+    const versionResult = spawnSync("gh", ["--version"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     });
 
-    return result.status === 0;
+    if (versionResult.status !== 0) {
+      throw new Error(
+        "GitHub CLI is not installed or not available in PATH. Install it with: scoop install gh",
+      );
+    }
+
+    const authResult = spawnSync("gh", ["auth", "status"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    if (authResult.status !== 0) {
+      throw new Error(
+        "GitHub CLI is installed but not authenticated. Run: gh auth login",
+      );
+    }
   }
 
   createPullRequestViaGithubCli(baseBranch: string, title: string, body: string): string {
-    const normalizedBaseBranch = baseBranch.replace(/^origin\//, "");
+    this.ensureGitHubCliReady();
+    this.ensureCurrentBranchHasUpstream();
 
+    const normalizedBaseBranch = baseBranch.replace(/^origin\//, "");
+   
     const result = spawnSync(
       "gh",
       [
@@ -325,6 +343,31 @@ export class GitService {
     }
 
     return result.stdout.trim();
+  }
+
+  hasUpstreamBranch(): boolean {
+    const result = spawnSync(
+      "git",
+      ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    return result.status === 0;
+  }
+
+  ensureCurrentBranchHasUpstream(): void {
+    if (this.hasUpstreamBranch()) {
+      return;
+    }
+
+    const branch = this.getBranch();
+
+    throw new Error(
+      `Current branch "${branch}" has no upstream branch. Push it first with: git push -u origin ${branch}`,
+    );
   }
 
   // Mutations
