@@ -224,36 +224,42 @@ export class GitService {
       .slice(0, this.config.git.maxChangedSymbols)
       .join("\n");
   }
+  
+  fetchRemoteBranches(): void {
+    this.runGitOrEmpty(["fetch", "--all", "--prune"], {
+      maxBuffer: this.config.git.maxBufferBytes,
+    });
+  }
 
-  getAllBranches(): string[] {
+  getRemoteBranches(): string[] {
     const raw = this.runGitOrEmpty([
       "branch",
-      "--all",
+      "--remotes",
       "--format=%(refname:short)",
     ]);
-
-    const current = this.getBranch();
 
     return raw
       .split("\n")
       .map((branch) => branch.trim())
       .filter(Boolean)
       .filter((branch) => !branch.includes("HEAD"))
-      .filter((branch) => branch !== current)
       .filter((branch, index, all) => all.indexOf(branch) === index);
   }
 
   getBranchPRSummary(baseBranch: string): BranchPRSummary {
     const commitsRaw = this.runGitOrEmpty([
-      "rev-list",
-      "--count",
-      `${baseBranch}..HEAD`,
+      "log",
+      "--right-only",
+      "--cherry-pick",
+      "--no-merges",
+      "--format=%H",
+      `${baseBranch}...HEAD`,
     ]);
 
     const shortStat = this.runGitOrEmpty([
       "diff",
       "--shortstat",
-      `${baseBranch}..HEAD`,
+      `${baseBranch}...HEAD`,
     ]);
 
     const match = shortStat.match(
@@ -262,7 +268,9 @@ export class GitService {
 
     return {
       branch: baseBranch,
-      commits: Number(commitsRaw || 0),
+      commits: commitsRaw
+        ? commitsRaw.split("\n").filter(Boolean).length
+        : 0,
       files: Number(match?.[1] || 0),
       insertions: Number(match?.[2] || 0),
       deletions: Number(match?.[3] || 0),
@@ -270,13 +278,15 @@ export class GitService {
   }
 
   getBranchPRSummaries(): BranchPRSummary[] {
-    return this.getAllBranches()
+    this.fetchRemoteBranches();
+
+    return this.getRemoteBranches()
       .map((branch) => this.getBranchPRSummary(branch))
       .filter((summary) =>
         summary.commits > 0 ||
-      summary.files > 0 ||
-      summary.insertions > 0 ||
-      summary.deletions > 0,
+        summary.files > 0 ||
+        summary.insertions > 0 ||
+        summary.deletions > 0,
       );
   }
 
