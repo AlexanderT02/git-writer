@@ -79,9 +79,19 @@ export class GitPRService {
   getAvailablePRBaseSummaries(): BranchPRSummary[] {
     this.refreshRemoteBranches();
 
-    return this.getRemoteBranchNames()
-      .map((branch) => this.getPRSummaryForBaseBranch(branch))
-      .filter((summary) => this.hasChanges(summary));
+    const summaries = this.getRemoteBranchNames().map((branch) =>
+        this.getPRSummaryForBaseBranch(branch),
+    );
+
+    const changedSummaries = summaries.filter((summary) =>
+        this.hasChanges(summary),
+    );
+
+    if (changedSummaries.length) {
+        return changedSummaries;
+    }
+
+    return summaries;
   }
 
   private countLines(value: string): number {
