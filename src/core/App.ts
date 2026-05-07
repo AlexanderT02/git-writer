@@ -17,6 +17,7 @@ import {
   estimateCommitTokens,
   estimatePRTokens,
 } from "../llm/generationEstimate.js";
+import { GracefulExit, UserCancelledError } from "../errors.js";
 
 export class App {
   private readonly git: GitService;
@@ -131,7 +132,7 @@ export class App {
         }
 
         UI.renderCancelled();
-        process.exit(0);
+        throw new UserCancelledError();
       }
     }
   }
@@ -143,7 +144,7 @@ export class App {
 
     if (!files.trim()) {
       UI.renderNothingToCommit();
-      process.exit(0);
+      throw new GracefulExit(0);
     }
 
     const ctx = this.commitContext.build(files);
@@ -162,8 +163,7 @@ export class App {
 
     this.git.createCommit(finalMessage);
     UI.renderCommitCreated(this.git.getLastCommitStats());
-
-    process.exit(0);
+    throw new GracefulExit(0);
   }
 
   buildPRContext(baseBranch: string = "origin/main"): PRContext {
@@ -181,7 +181,7 @@ export class App {
     }
 
     console.log("");
-    process.exit(1);
+    throw new GracefulExit(1);
   }
 
   async runPRInteractive(baseBranch?: string): Promise<void> {
@@ -191,7 +191,7 @@ export class App {
       console.log(
         "\n  ✖ No remote base branches found. Run git fetch --all --prune or pass a base branch directly, e.g. gw p origin/main\n",
       );
-      process.exit(1);
+      throw new GracefulExit(1);
     }
 
     const selectedBaseBranch =
@@ -212,8 +212,7 @@ export class App {
             console.log("\n  ✔ Pull request already exists.\n");
           }
 
-          process.exit(0);
-          return;
+          throw new GracefulExit(0);
 
         case "not_pushed":
         case "unpushed_commits":
@@ -225,8 +224,7 @@ export class App {
 
         case "created":
           UI.renderPRCreated(preflightError.url);
-          process.exit(0);
-          return;
+          throw new GracefulExit(0);
       }
     }
 
@@ -234,7 +232,7 @@ export class App {
       console.log(
         `\n  ✖ No PR changes found against ${selectedBaseBranch}.\n`,
       );
-      process.exit(1);
+      throw new GracefulExit(1);
     }
 
     const prContext = this.buildPRContext(selectedBaseBranch);
@@ -255,7 +253,7 @@ export class App {
       if (action === "copy") {
         await clipboard.write(`${title}\n\n${description}`);
         UI.renderCopied("Copied PR to clipboard");
-        process.exit(0);
+        throw new GracefulExit(0);
       }
 
       if (action === "create") {
@@ -268,8 +266,7 @@ export class App {
         switch (result.status) {
           case "created":
             UI.renderPRCreated(result.url);
-            process.exit(0);
-            return;
+            throw new GracefulExit(0);
 
           case "already_exists":
             if (result.url) {
@@ -278,8 +275,7 @@ export class App {
               console.log("\n  ✔ Pull request already exists.\n");
             }
 
-            process.exit(0);
-            return;
+            throw new GracefulExit(0);
 
           case "not_pushed":
           case "unpushed_commits":
@@ -291,7 +287,7 @@ export class App {
       }
 
       UI.renderCancelled();
-      process.exit(0);
+      throw new UserCancelledError();
     }
   }
 }
