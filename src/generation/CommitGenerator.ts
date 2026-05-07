@@ -12,6 +12,61 @@ export class CommitGenerator {
     private readonly config: AppConfig,
   ) {}
 
+  private isRateLimitError(error: unknown): boolean {
+    if (!error || typeof error !== "object") return false;
+
+    const candidate = error as {
+      status?: number;
+      statusCode?: number;
+      code?: string | number;
+      message?: string;
+    };
+
+    return (
+      candidate.status === 429 ||
+      candidate.statusCode === 429 ||
+      candidate.code === 429 ||
+      candidate.code === "rate_limit_exceeded" ||
+      /429|rate limit/i.test(candidate.message || "")
+    );
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private async withRetry<T>(
+    operation: () => Promise<T>,
+    options: {
+      retries?: number;
+      initialDelayMs?: number;
+      maxDelayMs?: number;
+    } = {},
+  ): Promise<T> {
+    const retries = options.retries ?? 3;
+    const initialDelayMs = options.initialDelayMs ?? 1_000;
+    const maxDelayMs = options.maxDelayMs ?? 8_000;
+
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+
+        if (!this.isRateLimitError(error) || attempt === retries) {
+          throw error;
+        }
+
+        const delay = Math.min(initialDelayMs * 2 ** attempt, maxDelayMs);
+        await this.sleep(delay);
+      }
+    }
+
+    throw lastError;
+  }
+
   buildReasoningPrompt(files: string, context: CommitContext): string {
     const {
       branch,
@@ -189,7 +244,7 @@ ${sections}`;
     let reasoning = "";
 
     try {
-      reasoning = await this.ai.complete(reasoningPrompt);
+      reasoning = await this.withRetry(() => this.ai.complete(reasoningPrompt));
     } catch {
       reasoning = "";
     }
@@ -200,10 +255,12 @@ ${sections}`;
 
     const streamSpinner = ora("Generating commit message...").start();
 
-    const result = await this.ai.stream(messagePrompt, (text) => {
-      streamSpinner.stop();
-      UI.render(text, this.config);
-    });
+    const result = await this.withRetry(() =>
+      this.ai.stream(messagePrompt, (text) => {
+        streamSpinner.stop();
+        UI.render(text, this.config);
+      }),
+    );
 
     streamSpinner.stop();
 
