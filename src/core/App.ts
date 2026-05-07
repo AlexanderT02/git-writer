@@ -149,6 +149,19 @@ export class App {
       }
 
       if (action === "create") {
+        if (!this.git.hasGitHubCli()) {
+          throw new Error(
+            "GitHub CLI is not installed or not available in PATH. Install it and run: gh auth login",
+          );
+        }
+
+        const url = this.git.createPullRequestViaGithubCli(
+          selectedBaseBranch,
+          title,
+          description,
+        );
+
+        UI.renderPRCreated(url);
         process.exit(0);
       }
 
