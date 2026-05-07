@@ -3,7 +3,6 @@ import { UI } from "../ui/UI.js";
 import type { AppConfig } from "../config/config.js";
 import type { CommitContext } from "../types/types.js";
 import type { LLM } from "../llm/LLM.js";
-import { estimateLLMCall } from "../llm/tokenEstimate.js";
 
 export class CommitGenerator {
   extraInstruction = "";
@@ -184,9 +183,6 @@ ${sections}`;
 
   async generate(files: string, context: CommitContext): Promise<string> {
     const reasoningPrompt = this.buildReasoningPrompt(files, context);
-    const reasoningEstimate = estimateLLMCall(reasoningPrompt, 700);
-
-    UI.renderTokenEstimate(reasoningEstimate.totalTokens, "Analysis tokens");
 
     const spinner = ora("Analysing intent...").start();
 
@@ -199,14 +195,8 @@ ${sections}`;
     }
 
     const messagePrompt = this.buildMessagePrompt(files, context, reasoning);
-    const messageEstimate = estimateLLMCall(messagePrompt, 350);
-
-    const totalTokens =
-      reasoningEstimate.totalTokens + messageEstimate.totalTokens;
 
     spinner.stop();
-
-    UI.renderTokenEstimate(totalTokens);
 
     const streamSpinner = ora("Generating commit message...").start();
 

@@ -1,9 +1,7 @@
 import ora from "ora";
-import { UI } from "../ui/UI.js";
 import type { PRContext } from "../types/types.js";
 import type { AppConfig } from "../config/config.js";
 import type { LLM } from "../llm/LLM.js";
-import { estimateLLMCall } from "../llm/tokenEstimate.js";
 
 export class PRGenerator {
   extraInstruction = "";
@@ -76,42 +74,27 @@ ${reasoning}`;
   async generate(
     prContext: PRContext,
   ): Promise<{ title: string; description: string }> {
-    const reasoningPrompt = this.buildReasoningPrompt(prContext);
-    const reasoningEstimate = estimateLLMCall(reasoningPrompt, 1200);
-
-    UI.renderTokenEstimate(reasoningEstimate.totalTokens, "PR analysis tokens");
-
     const spinner = ora("Analyzing PR context...").start();
 
     let reasoning = "";
 
     try {
-      reasoning = await this.ai.complete(reasoningPrompt);
+      reasoning = await this.ai.complete(this.buildReasoningPrompt(prContext));
     } catch {
       reasoning = "";
     }
 
-    const messagePrompt = this.buildMessagePrompt(reasoning);
-    const messageEstimate = estimateLLMCall(messagePrompt, 900);
-
-    const totalTokens =
-      reasoningEstimate.totalTokens + messageEstimate.totalTokens;
-
-    spinner.stop();
-
-    UI.renderTokenEstimate(totalTokens, "PR tokens");
-
-    const generationSpinner = ora("Generating PR Markdown...").start();
+    spinner.text = "Generating PR Markdown...";
 
     let output = "";
 
     try {
-      output = await this.ai.complete(messagePrompt);
+      output = await this.ai.complete(this.buildMessagePrompt(reasoning));
     } catch {
       output = "";
     }
 
-    generationSpinner.stop();
+    spinner.stop();
 
     return this.parsePROutput(output);
   }
