@@ -1,11 +1,7 @@
 import { execFileSync, spawnSync } from "child_process";
 import chalk from "chalk";
 import type { AppConfig } from "../config/config.js";
-import type {
-  BranchContext,
-  CommitStats,
-  BranchPRSummary,
-} from "../types/types.js";
+import type { BranchContext, CommitStats } from "../types/types.js";
 
 type GitOptions = {
   trim?: boolean;
@@ -33,83 +29,71 @@ export class GitService {
     }
   }
 
-  // Repository state
-
-  getBranch(): string {
+  getCurrentBranch(): string {
     return this.runGit(["rev-parse", "--abbrev-ref", "HEAD"]);
   }
 
-  getBranchContext(): BranchContext {
-    const branch = this.getBranch();
-    const issueMatch = branch.match(/[/#-](\d{2,})/);
+  getCurrentBranchContext(): BranchContext {
+    const branch = this.getCurrentBranch();
+    const issue = branch.match(/[/#-](\d{2,})/)?.[1];
 
     return {
       branch,
-      issue: issueMatch?.[1] ? `#${issueMatch[1]}` : null,
+      issue: issue ? `#${issue}` : null,
     };
   }
 
-  getDetailedStatus(): string {
+  getWorkingTreeStatus(): string {
     return this.runGitOrEmpty(["status", "--porcelain=v1", "-uall"], {
       trim: false,
     });
   }
 
-  // Staged files and diffs
-
-  getStagedFiles(): string {
-    return this.runGitOrEmpty(["diff", "--cached", "--name-only"]);
+  getStagedFileNames(): string {
+    return this.getStagedDiff(["--name-only"]);
   }
 
-  getStagedStats(): string {
-    return this.runGitOrEmpty(["diff", "--cached", "--shortstat"]);
+  getStagedShortStat(): string {
+    return this.getStagedDiff(["--shortstat"]);
   }
 
-  getCachedNameStatus(): string {
-    return this.runGitOrEmpty(["diff", "--cached", "--name-status"]);
+  getStagedNameStatus(): string {
+    return this.getStagedDiff(["--name-status"]);
   }
 
-  getCachedNumstat(): string {
-    return this.runGitOrEmpty(["diff", "--cached", "--numstat"]);
+  getStagedNumstat(): string {
+    return this.getStagedDiff(["--numstat"]);
   }
 
-  getWorkingTreeNumstat(): string {
+  getUnstagedNumstat(): string {
     return this.runGitOrEmpty(["diff", "--numstat"]);
   }
 
-  getCachedFileDiff(file: string): string {
-    return this.runGitOrEmpty(["diff", "--cached", "--", file]);
+  getStagedFileDiff(file: string): string {
+    return this.getStagedDiff(["--", file]);
   }
 
-  getCachedFileDiffWithContext(file: string, contextLines: number): string {
-    return this.runGitOrEmpty([
-      "diff",
-      "--cached",
-      `-U${contextLines}`,
-      "--",
-      file,
-    ]);
+  getStagedFileDiffWithContext(file: string, contextLines: number): string {
+    return this.getStagedDiff([`-U${contextLines}`, "--", file]);
   }
 
-  getCachedFileNumstat(file: string): string {
-    return this.runGitOrEmpty(["diff", "--cached", "--numstat", "--", file]);
+  getStagedFileNumstat(file: string): string {
+    return this.getStagedDiff(["--numstat", "--", file]);
   }
 
-  getStagedFileSummaries(): string {
-    const status = this.getCachedNameStatus();
-    if (!status) return "";
-
-    return status
+  getStagedFileSummaryLines(): string {
+    return this.getStagedNameStatus()
       .split("\n")
+      .filter(Boolean)
       .map((line) => {
-        const [statusCode, ...rest] = line.trim().split(/\s+/);
-        return `${statusCode}: ${rest.join(" ")}`;
+        const [status, ...file] = line.trim().split(/\s+/);
+        return `${status}: ${file.join(" ")}`;
       })
       .join("\n");
   }
 
-  getDiff(): string {
-    const raw = this.runGitOrEmpty(["diff", "--cached"]);
+  getStagedDiffForPrompt(): string {
+    const raw = this.getStagedDiff();
     const lines = raw.split("\n");
 
     if (lines.length <= this.config.git.largeDiffLineLimit) {
@@ -118,19 +102,20 @@ export class GitService {
 
     console.log(chalk.yellow("⚠ Large diff — semantic summary mode\n"));
 
-    const stat = this.runGitOrEmpty(["diff", "--cached", "--stat"]);
-    const headers = this.runGitOrEmpty(["diff", "--cached", "--unified=0"])
-      .split("\n")
-      .filter((line) => line.startsWith("+++") || line.startsWith("@@"))
-      .slice(0, this.config.git.largeDiffHeaderLimit)
-      .join("\n");
-
-    return `[CHANGED FILES]\n${stat}\n\n[CHANGED SYMBOLS & HUNKS]\n${headers}`;
+    return [
+      "[CHANGED FILES]",
+      this.getStagedDiff(["--stat"]),
+      "",
+      "[CHANGED SYMBOLS & HUNKS]",
+      this.getStagedDiff(["--unified=0"])
+        .split("\n")
+        .filter((line) => line.startsWith("+++") || line.startsWith("@@"))
+        .slice(0, this.config.git.largeDiffHeaderLimit)
+        .join("\n"),
+    ].join("\n");
   }
 
-  // Git object access
-
-  gitRefExists(ref: string): boolean {
+  refExists(ref: string): boolean {
     try {
       this.runGit(["cat-file", "-e", ref]);
       return true;
@@ -139,15 +124,13 @@ export class GitService {
     }
   }
 
-  getFileFromGitRef(ref: string): string {
+  readFileFromRef(ref: string): string {
     return this.runGitOrEmpty(["show", ref], {
       maxBuffer: this.config.context.maxFileBufferBytes,
     });
   }
 
-  // Commit history context
-
-  getRecentCommits(n = this.config.git.recentCommitCount): string {
+  getRecentCommitLines(n = this.config.git.recentCommitCount): string {
     return this.runGitOrEmpty(["log", "--oneline", `-${n}`, "--no-merges"]);
   }
 
@@ -163,8 +146,8 @@ export class GitService {
 
     if (!commits) return "";
 
-    const scopes = new Set<string>();
     const types = new Set<string>();
+    const scopes = new Set<string>();
 
     for (const line of commits.split("\n")) {
       const match = line.match(/^(\w+)(?:\(([^)]+)\))?:/);
@@ -173,24 +156,21 @@ export class GitService {
 
       types.add(match[1] ?? "");
 
-      if (match[2]) {
-        scopes.add(match[2]);
-      }
+      if (match[2]) scopes.add(match[2]);
     }
 
     return [
-      types.size ? `Recent commit types: ${[...types].join(", ")}` : "",
-      scopes.size
-        ? `Recent scopes: ${[...scopes]
+      types.size && `Recent commit types: ${[...types].join(", ")}`,
+      scopes.size &&
+        `Recent scopes: ${[...scopes]
           .slice(0, this.config.git.maxRecentScopes)
-          .join(", ")}`
-        : "",
+          .join(", ")}`,
     ]
       .filter(Boolean)
       .join("\n");
   }
 
-  getLastCommitSummary(): CommitStats | null {
+  getLastCommitStats(): CommitStats | null {
     const output = this.runGitOrEmpty(["show", "--shortstat", "-1"]);
     const match = output.match(
       /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/,
@@ -205,18 +185,18 @@ export class GitService {
     };
   }
 
-  getChangedSymbols(): string {
-    const raw = this.runGitOrEmpty(["diff", "--cached", "--unified=0"]);
+  getChangedSymbolsFromStagedDiff(): string {
+    const raw = this.getStagedDiff(["--unified=0"]);
     const symbols = new Set<string>();
     const hunkHeader = /^@@[^@]+@@\s*(.+)$/gm;
 
     let match: RegExpExecArray | null;
 
     while ((match = hunkHeader.exec(raw)) !== null) {
-      const ctx = match[1]?.trim() ?? "";
+      const symbol = match[1]?.trim() ?? "";
 
-      if (ctx && ctx.length < this.config.git.maxChangedSymbolLength) {
-        symbols.add(ctx);
+      if (symbol && symbol.length < this.config.git.maxChangedSymbolLength) {
+        symbols.add(symbol);
       }
     }
 
@@ -225,173 +205,31 @@ export class GitService {
       .join("\n");
   }
 
-  fetchRemoteBranches(): void {
-    this.runGitOrEmpty(["fetch", "--all", "--prune"], {
-      maxBuffer: this.config.git.maxBufferBytes,
-    });
+  stageFiles(files: string[]): void {
+    this.runGitWriteCommand(["add", "--", ...files], "Failed to stage files");
   }
 
-  getRemoteBranches(): string[] {
-    const raw = this.runGitOrEmpty([
-      "branch",
-      "--remotes",
-      "--format=%(refname:short)",
-    ]);
-
-    return raw
-      .split("\n")
-      .map((branch) => branch.trim())
-      .filter(Boolean)
-      .filter((branch) => !branch.includes("HEAD"))
-      .filter((branch, index, all) => all.indexOf(branch) === index);
+  createCommit(message: string): void {
+    this.runGitWriteCommand(["commit", "-F", "-"], "Failed to create commit", message);
   }
 
-  getBranchPRSummary(baseBranch: string): BranchPRSummary {
-    const commitsRaw = this.runGitOrEmpty([
-      "log",
-      "--right-only",
-      "--cherry-pick",
-      "--no-merges",
-      "--format=%H",
-      `${baseBranch}...HEAD`,
-    ]);
-
-    const shortStat = this.runGitOrEmpty([
-      "diff",
-      "--shortstat",
-      `${baseBranch}...HEAD`,
-    ]);
-
-    const match = shortStat.match(
-      /(?:(\d+) files? changed)?(?:,?\s*(\d+) insertions?\(\+\))?(?:,?\s*(\d+) deletions?\(-\))?/,
-    );
-
-    return {
-      branch: baseBranch,
-      commits: commitsRaw
-        ? commitsRaw.split("\n").filter(Boolean).length
-        : 0,
-      files: Number(match?.[1] || 0),
-      insertions: Number(match?.[2] || 0),
-      deletions: Number(match?.[3] || 0),
-    };
+  private getStagedDiff(args: string[] = []): string {
+    return this.runGitOrEmpty(["diff", "--cached", ...args]);
   }
 
-  getBranchPRSummaries(): BranchPRSummary[] {
-    this.fetchRemoteBranches();
-
-    return this.getRemoteBranches()
-      .map((branch) => this.getBranchPRSummary(branch))
-      .filter((summary) =>
-        summary.commits > 0 ||
-        summary.files > 0 ||
-        summary.insertions > 0 ||
-        summary.deletions > 0,
-      );
-  }
-
-  ensureGitHubCliReady(): void {
-    const versionResult = spawnSync("gh", ["--version"], {
+  private runGitWriteCommand(
+    args: string[],
+    fallbackError: string,
+    input?: string,
+  ): void {
+    const result = spawnSync("git", args, {
+      input,
       encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    if (versionResult.status !== 0) {
-      throw new Error(
-        "GitHub CLI is not installed or not available in PATH. Install it with: scoop install gh",
-      );
-    }
-
-    const authResult = spawnSync("gh", ["auth", "status"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    if (authResult.status !== 0) {
-      throw new Error(
-        "GitHub CLI is installed but not authenticated. Run: gh auth login",
-      );
-    }
-  }
-
-  createPullRequestViaGithubCli(baseBranch: string, title: string, body: string): string {
-    this.ensureGitHubCliReady();
-    this.ensureCurrentBranchHasUpstream();
-
-    const normalizedBaseBranch = baseBranch.replace(/^origin\//, "");
-   
-    const result = spawnSync(
-      "gh",
-      [
-        "pr",
-        "create",
-        "--base",
-        normalizedBaseBranch,
-        "--title",
-        title,
-        "--body",
-        body,
-      ],
-      {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
-
-    if (result.status !== 0) {
-      throw new Error(result.stderr || "Failed to create pull request via GitHub CLI");
-    }
-
-    return result.stdout.trim();
-  }
-
-  hasUpstreamBranch(): boolean {
-    const result = spawnSync(
-      "git",
-      ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
-      {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
-
-    return result.status === 0;
-  }
-
-  ensureCurrentBranchHasUpstream(): void {
-    if (this.hasUpstreamBranch()) {
-      return;
-    }
-
-    const branch = this.getBranch();
-
-    throw new Error(
-      `Current branch "${branch}" has no upstream branch. Push it first with: git push -u origin ${branch}`,
-    );
-  }
-
-  // Mutations
-
-  add(files: string[]): void {
-    const result = spawnSync("git", ["add", "--", ...files], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: input ? ["pipe", "ignore", "pipe"] : ["ignore", "pipe", "pipe"],
     });
 
     if (result.status !== 0) {
-      throw new Error(result.stderr || "Failed to stage files");
-    }
-  }
-
-  commit(message: string): void {
-    const result = spawnSync("git", ["commit", "-F", "-"], {
-      input: message,
-      encoding: "utf8",
-      stdio: ["pipe", "ignore", "pipe"],
-    });
-
-    if (result.status !== 0) {
-      throw new Error(result.stderr || "Failed to create commit");
+      throw new Error(result.stderr || fallbackError);
     }
   }
 }
