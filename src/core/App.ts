@@ -12,6 +12,10 @@ import type { PRContext } from "../types/types.js";
 import { PRGenerator } from "../generation/PRGenerator.js";
 import { GitPRService } from "../git/GitPRService.js";
 import { GitHubCLIService } from "../git/GitHubCliService.js";
+import {
+  estimateCommitTokens,
+  estimatePRTokens,
+} from "../llm/generationEstimate.js";
 
 export class App {
   private readonly git: GitService;
@@ -61,6 +65,15 @@ export class App {
 
       const files = this.git.getStagedFileNames();
       const ctx = this.context.build(files);
+
+      let estimatedTokens = estimateCommitTokens(
+        this.commitGenerator,
+        files,
+        ctx,
+      );
+
+      UI.renderTokenEstimate(estimatedTokens);
+
       let message = await this.commitGenerator.generate(files, ctx);
 
       while (true) {
@@ -74,6 +87,15 @@ export class App {
 
         if (action === "regen") {
           this.commitGenerator.extraInstruction = "";
+
+          estimatedTokens = estimateCommitTokens(
+            this.commitGenerator,
+            files,
+            ctx,
+          );
+
+          UI.renderTokenEstimate(estimatedTokens);
+
           message = await this.commitGenerator.generate(files, ctx);
           continue;
         }
@@ -81,6 +103,15 @@ export class App {
         if (action === "refine") {
           const text = await UI.refineInput(config);
           this.commitGenerator.extraInstruction = text;
+
+          estimatedTokens = estimateCommitTokens(
+            this.commitGenerator,
+            files,
+            ctx,
+          );
+
+          UI.renderTokenEstimate(estimatedTokens);
+
           message = await this.commitGenerator.generate(files, ctx);
           continue;
         }
@@ -113,6 +144,11 @@ export class App {
     }
 
     const ctx = this.context.build(files);
+
+    UI.renderTokenEstimate(
+      estimateCommitTokens(this.commitGenerator, files, ctx),
+    );
+
     const message = await this.commitGenerator.generate(files, ctx);
 
     this.commit(message);
@@ -134,13 +170,19 @@ export class App {
   async runPRInteractive(baseBranch?: string): Promise<void> {
     const selectedBaseBranch =
       baseBranch ??
-    await UI.selectBranch(
-      this.gitPR.getAvailablePRBaseSummaries(),
-      "Select base branch for PR:",
-    );
+      (await UI.selectBranch(
+        this.gitPR.getAvailablePRBaseSummaries(),
+        "Select base branch for PR:",
+      ));
 
     const prContext = this.buildPRContext(selectedBaseBranch);
     const prGenerator = new PRGenerator(this.ai, config);
+
+    UI.renderTokenEstimate(
+      estimatePRTokens(prGenerator, prContext),
+      "PR tokens",
+    );
+
     const { title, description } = await prGenerator.generate(prContext);
 
     while (true) {

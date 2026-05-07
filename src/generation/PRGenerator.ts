@@ -12,7 +12,6 @@ export class PRGenerator {
   ) {}
 
   buildReasoningPrompt(prContext: PRContext): string {
-    // Keep the first pass focused on understanding the change, not formatting.
     const sections = [
       `Branch: ${prContext.branch}${prContext.issue ? ` (${prContext.issue})` : ""}`,
       prContext.commits ? `Commits:\n${prContext.commits}` : "",
@@ -41,56 +40,55 @@ ${sections.join("\n\n")}`;
   buildMessagePrompt(reasoning: string): string {
     return `Based on the analysis below, generate a concise GitHub pull request.
 
-  Return exactly this format:
+Return exactly this format:
 
-  TITLE:
-  <one concise PR title, max 15 words>
+TITLE:
+<one concise PR title, max 15 words>
 
-  BODY:
-  ## Summary
-  <1 short paragraph>
+BODY:
+## Summary
+<1 short paragraph>
 
-  ## Changes
-  - <key change>
-  - <key change>
-  - <key change>
+## Changes
+- <key change>
+- <key change>
+- <key change>
 
-  ## Risks
-  - <risk, breaking change, or "No major risks identified">
+## Risks
+- <risk, breaking change, or "No major risks identified">
 
-  Rules:
-  - Do not add text before TITLE:
-  - Do not use "# PR Title"
-  - Do not use "# PR Description"
-  - Do not include the title in BODY
-  - Do not wrap the output in code fences
-  - Keep it short but complete
-  - Mention breaking changes only if clearly supported by the changes
-  - Do not invent tests, migrations, or behavior
+Rules:
+- Do not add text before TITLE:
+- Do not use "# PR Title"
+- Do not use "# PR Description"
+- Do not include the title in BODY
+- Do not wrap the output in code fences
+- Keep it short but complete
+- Mention breaking changes only if clearly supported by the changes
+- Do not invent tests, migrations, or behavior
 
-  Analysis:
-  ${reasoning}`;
+Analysis:
+${reasoning}`;
   }
 
   async generate(
     prContext: PRContext,
   ): Promise<{ title: string; description: string }> {
     const spinner = ora("Analyzing PR context...").start();
+
     let reasoning = "";
 
     try {
-      // First pass: extract intent, impact, and risk from the branch diff.
       reasoning = await this.ai.complete(this.buildReasoningPrompt(prContext));
     } catch {
-      // If reasoning fails, continue with an empty analysis instead of crashing the PR flow.
       reasoning = "";
     }
 
     spinner.text = "Generating PR Markdown...";
+
     let output = "";
 
     try {
-      // Second pass: format the analysis into Markdown that can be pasted into GitHub.
       output = await this.ai.complete(this.buildMessagePrompt(reasoning));
     } catch {
       output = "";
@@ -100,6 +98,7 @@ ${sections.join("\n\n")}`;
 
     return this.parsePROutput(output);
   }
+
   parsePROutput(output: string): { title: string; description: string } {
     const cleaned = this.cleanMarkdown(output);
 
@@ -144,16 +143,18 @@ ${sections.join("\n\n")}`;
   }
 
   private cleanTitle(title: string): string {
-    return title
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .join(" ")
-      .replace(/^[-*]\s*/, "")
-      .replace(/^#+\s*/, "")
-      .replace(/^PR Title:?\s*/i, "")
-      .replace(/^TITLE:?\s*/i, "")
-      .trim() || "PR Update";
+    return (
+      title
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .join(" ")
+        .replace(/^[-*]\s*/, "")
+        .replace(/^#+\s*/, "")
+        .replace(/^PR Title:?\s*/i, "")
+        .replace(/^TITLE:?\s*/i, "")
+        .trim() || "PR Update"
+    );
   }
 
   private cleanBody(body: string): string {
