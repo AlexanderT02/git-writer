@@ -100,3 +100,14 @@ export type PullRequestCreateResult =
     status: "failed";
     message: string;
   };
+
+export interface UsageEntry {
+  timestamp: string;
+  command: "commit" | "pr";
+  provider: string;
+  reasoningModel: string;
+  generationModel: string;
+  estimatedTokens: number;
+  fileCount: number;
+  branch: string;
+}
