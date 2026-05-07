@@ -149,7 +149,6 @@ export class App {
       }
 
       if (action === "create") {
-        UI.renderInfo("PR would be created via GitHub CLI here");
         process.exit(0);
       }
 

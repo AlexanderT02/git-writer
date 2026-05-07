@@ -126,10 +126,6 @@ export class UI {
     });
   }
 
-  static renderInfo(message: string): void {
-    console.log(chalk.gray(`\n✔ ${message}\n`));
-  }
-
   static showHelp(): never {
     const command = chalk.cyan;
     const option = chalk.yellow;
