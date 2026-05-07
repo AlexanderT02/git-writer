@@ -1,11 +1,16 @@
 import chalk from "chalk";
 import { editor, input, select, Separator } from "@inquirer/prompts";
 import type { AppConfig } from "../config/config.js";
+import { marked } from "marked";
+import TerminalRenderer from "marked-terminal";
 import type {
   BranchPRSummary,
   CommitStats,
   UiAction,
 } from "../types/types.js";
+marked.setOptions({
+  renderer: new TerminalRenderer(),
+});
 
 export class UI {
   static render(msg: string, config: AppConfig): void {
@@ -27,15 +32,23 @@ export class UI {
     title: string,
     description: string,
   ): void {
+    const border = chalk.dim("─".repeat(72));
+
     console.log("");
+    console.log(border);
     console.log(chalk.bold.blue("Pull Request Preview"));
-    console.log(chalk.dim("─".repeat(48)));
-    console.log(`${chalk.green("Base:")} ${baseBranch}`);
-    console.log(`${chalk.green("Title:")} ${title}`);
+    console.log(border);
+
+    console.log(`${chalk.dim("Base ")}  ${chalk.cyan(baseBranch)}`);
+    console.log(`${chalk.dim("Title")}  ${chalk.green(title)}`);
+
     console.log("");
-    console.log(chalk.green("Description:"));
-    console.log(description);
-    console.log(chalk.dim("─".repeat(48)));
+    console.log(chalk.dim("Body"));
+    console.log(chalk.dim("────"));
+
+    UI.renderMarkdown(description);
+
+    console.log(border);
   }
 
   static renderCommitCreated(stats: CommitStats | null): void {
@@ -171,5 +184,9 @@ export class UI {
     console.log("");
 
     process.exit(0);
+  }
+
+  static renderMarkdown(markdown: string): void {
+    console.log(marked(markdown));
   }
 }
