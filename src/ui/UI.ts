@@ -198,4 +198,8 @@ export class UI {
       console.log("");
     }
   }
+
+  static renderTokenEstimate(totalTokens: number, label = "Tokens"): void {
+    console.log(chalk.dim(`${label}: ~${totalTokens.toLocaleString()}`));
+  }
 }
