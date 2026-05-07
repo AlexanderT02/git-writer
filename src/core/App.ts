@@ -2,7 +2,7 @@ import chalk from "chalk";
 import clipboard from "clipboardy";
 
 import { config } from "../config/config.js";
-import { CommitGenerator } from "../commit/CommitGenerator.js";
+import { CommitGenerator } from "../generation/CommitGenerator.js";
 import { ContextBuilder } from "../context/ContextBuilder.js";
 import { GitService } from "../git/GitService.js";
 import { createLLM } from "../llm/index.js";
@@ -10,7 +10,7 @@ import { StagingService } from "../staging/StagingService.js";
 import { UI } from "../ui/UI.js";
 import type { LLM } from "../llm/LLM.js";
 import type { PRContext } from "../types/types.js";
-import { PRGenerator } from "../commit/PRGenerator.js";
+import { PRGenerator } from "../generation/PRGenerator.js";
 export class App {
   private readonly git: GitService;
   private readonly ai: LLM;
