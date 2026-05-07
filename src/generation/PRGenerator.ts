@@ -13,6 +13,7 @@ export class PRGenerator {
   ) {}
 
   buildReasoningPrompt(prContext: PRContext): string {
+    // Keep the first pass focused on understanding the change, not formatting.
     const sections = [
       `Branch: ${prContext.branch}${prContext.issue ? ` (${prContext.issue})` : ""}`,
       prContext.commits ? `Commits:\n${prContext.commits}` : "",
@@ -39,6 +40,7 @@ ${sections.join("\n\n")}`;
   }
 
   buildMessagePrompt(reasoning: string): string {
+    // The second pass turns the analysis into a short, review-friendly PR body.
     return `Based on the analysis below, generate a professional PR title and description in Markdown.
 
 Requirements:
@@ -58,13 +60,17 @@ Analysis:
 ${reasoning}`;
   }
 
-  async generate(prContext: PRContext): Promise<{ title: string; description: string }> {
+  async generate(
+    prContext: PRContext,
+  ): Promise<{ title: string; description: string }> {
     const spinner = ora("Analyzing PR context...").start();
     let reasoning = "";
 
     try {
+      // First pass: extract intent, impact, and risk from the branch diff.
       reasoning = await this.ai.complete(this.buildReasoningPrompt(prContext));
     } catch {
+      // If reasoning fails, continue with an empty analysis instead of crashing the PR flow.
       reasoning = "";
     }
 
@@ -72,17 +78,24 @@ ${reasoning}`;
     let output = "";
 
     try {
+      // Second pass: format the analysis into Markdown that can be pasted into GitHub.
       output = await this.ai.complete(this.buildMessagePrompt(reasoning));
     } catch {
       output = "";
     }
 
     spinner.stop();
+
+    // Show the raw generated Markdown before extracting title/body.
     UI.render(output, this.config);
 
     const lines = output.split("\n").filter(Boolean);
+
+    // The prompt asks for fixed headings, so we can split title and description reliably.
     const titleIndex = lines.findIndex((line) => line.startsWith("### PR Title"));
-    const descIndex = lines.findIndex((line) => line.startsWith("### PR Description"));
+    const descIndex = lines.findIndex((line) =>
+      line.startsWith("### PR Description"),
+    );
 
     const title = titleIndex !== -1 && descIndex !== -1
       ? lines.slice(titleIndex + 1, descIndex).join(" ").trim()
