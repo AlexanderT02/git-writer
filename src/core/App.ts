@@ -9,7 +9,7 @@ import { createLLM } from "../llm/index.js";
 import { StagingService } from "../staging/StagingService.js";
 import { UI } from "../ui/UI.js";
 import type { LLM } from "../llm/LLM.js";
-import type { PRContext } from "../types/types.js";
+import type { PRContext, UsageEntry } from "../types/types.js";
 import { PRGenerator } from "../generation/PRGenerator.js";
 import { GitPRService } from "../git/GitPRService.js";
 import { GitHubCLIService } from "../git/GitHubCliService.js";
@@ -19,6 +19,24 @@ import {
 } from "../llm/estimate/generationEstimate.js";
 import { GracefulExit, UserCancelledError } from "../errors.js";
 import { UsageTracker } from "../stats/UsageTracker.js";
+
+type GenerationUsage = {
+  reasoning?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    reasoningTokens?: number;
+    cachedTokens?: number;
+  };
+  generation?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    reasoningTokens?: number;
+    cachedTokens?: number;
+  };
+  totalTokens: number;
+};
 
 export class App {
   private readonly git: GitService;
@@ -73,8 +91,11 @@ export class App {
       const files = this.git.getStagedFileNames();
       const ctx = this.commitContext.build(files);
 
+      const startedAt = Date.now();
+
       let generated = await this.commitGenerator.generate(files, ctx);
       let message = generated.message;
+      let durationMs = Date.now() - startedAt;
 
       while (true) {
         UI.render(message, config);
@@ -82,14 +103,22 @@ export class App {
         const action = await UI.actionMenu(config);
 
         if (action === "commit") {
-          const fileCount = files.split("\n").filter(Boolean).length;
-          this.commit(message, fileCount, generated.usage.totalTokens);
+          this.commit(message, {
+            files,
+            diff: ctx._diff ?? "",
+            usedTokens: generated.usage.totalTokens,
+            usage: generated.usage,
+            durationMs,
+            fastMode: false,
+          });
         }
 
         if (action === "regen") {
           this.commitGenerator.extraInstruction = "";
 
+          const regenStartedAt = Date.now();
           generated = await this.commitGenerator.generate(files, ctx);
+          durationMs = Date.now() - regenStartedAt;
           message = generated.message;
 
           continue;
@@ -99,7 +128,9 @@ export class App {
           const text = await UI.refineInput(config);
           this.commitGenerator.extraInstruction = text;
 
+          const refineStartedAt = Date.now();
           generated = await this.commitGenerator.generate(files, ctx);
+          durationMs = Date.now() - refineStartedAt;
           message = generated.message;
 
           continue;
@@ -144,10 +175,18 @@ export class App {
 
     this.assertFastModeTokenLimit(estimatedTokens);
 
+    const startedAt = Date.now();
     const generated = await this.commitGenerator.generate(files, ctx);
+    const durationMs = Date.now() - startedAt;
 
-    const fileCount = files.split("\n").filter(Boolean).length;
-    this.commit(generated.message, fileCount, generated.usage.totalTokens);
+    this.commit(generated.message, {
+      files,
+      diff: ctx._diff ?? "",
+      usedTokens: generated.usage.totalTokens,
+      usage: generated.usage,
+      durationMs,
+      fastMode: true,
+    });
   }
 
   private assertFastModeFileLimit(files: string): void {
@@ -179,22 +218,30 @@ export class App {
 
   private commit(
     message: string,
-    fileCount: number = 0,
-    usedTokens: number = 0,
+    meta: {
+      files: string;
+      diff: string;
+      usedTokens: number;
+      usage: GenerationUsage;
+      durationMs: number;
+      fastMode: boolean;
+    },
   ): never {
     const finalMessage = this.appendIssueRefs(message);
 
     this.git.createCommit(finalMessage);
 
-    this.tracker.record({
-      command: "commit",
-      provider: config.llm.provider,
-      reasoningModel: config.llm.reasoningModel,
-      generationModel: config.llm.generationModel,
-      estimatedTokens: usedTokens,
-      fileCount,
-      branch: this.git.getCurrentBranch(),
-    });
+    this.tracker.record(
+      this.buildUsageEntry("commit", {
+        files: meta.files,
+        diff: meta.diff,
+        usage: meta.usage,
+        usedTokens: meta.usedTokens,
+        durationMs: meta.durationMs,
+        fastMode: meta.fastMode,
+        success: true,
+      }),
+    );
 
     UI.renderCommitCreated(this.git.getLastCommitStats());
     throw new GracefulExit(0);
@@ -271,23 +318,22 @@ export class App {
 
     this.renderLargePRTokenEstimate(prGenerator, prContext);
 
+    const startedAt = Date.now();
     const generatedPR = await prGenerator.generate(prContext);
+    const durationMs = Date.now() - startedAt;
+
     const { title, description } = generatedPR;
 
-    const prFileCount = prContext.diff
-      .split("\n")
-      .filter((line) => line.startsWith("diff --git")).length;
-
-    this.tracker.record({
-      command: "pr",
-      provider: config.llm.provider,
-      reasoningModel: config.llm.reasoningModel,
-      generationModel: config.llm.generationModel,
-      estimatedTokens: generatedPR.usage.totalTokens,
-      fileCount: prFileCount,
-      branch: this.git.getCurrentBranch(),
-    });
-
+    this.tracker.record(
+      this.buildUsageEntry("pr", {
+        diff: prContext.diff,
+        usage: generatedPR.usage,
+        usedTokens: generatedPR.usage.totalTokens,
+        durationMs,
+        fastMode: false,
+        success: true,
+      }),
+    );
     while (true) {
       UI.renderPRPreview(selectedBaseBranch, title, description);
 
@@ -332,6 +378,92 @@ export class App {
       UI.renderCancelled();
       throw new UserCancelledError();
     }
+  }
+
+  private buildUsageEntry(
+    command: "commit" | "pr",
+    meta: {
+      files?: string;
+      diff: string;
+      usage: GenerationUsage;
+      usedTokens: number;
+      durationMs: number;
+      success: boolean;
+      fastMode: boolean;
+      errorCode?: string;
+    },
+  ): UsageEntry {
+    const lineStats = this.extractLineStats(meta.diff);
+
+    return {
+      timestamp: new Date().toISOString(),
+      command,
+      provider: config.llm.provider,
+      reasoningModel: config.llm.reasoningModel,
+      generationModel: config.llm.generationModel,
+
+      usedTokens: meta.usedTokens,
+      inputTokens:
+      (meta.usage.reasoning?.inputTokens ?? 0) +
+      (meta.usage.generation?.inputTokens ?? 0),
+      outputTokens:
+      (meta.usage.reasoning?.outputTokens ?? 0) +
+      (meta.usage.generation?.outputTokens ?? 0),
+      reasoningTokens:
+      (meta.usage.reasoning?.reasoningTokens ?? 0) +
+      (meta.usage.generation?.reasoningTokens ?? 0),
+      cachedTokens:
+      (meta.usage.reasoning?.cachedTokens ?? 0) +
+      (meta.usage.generation?.cachedTokens ?? 0),
+
+      fileCount: this.countFiles(command, meta.files ?? meta.diff),
+      changedLines: lineStats.additions + lineStats.deletions,
+      additions: lineStats.additions,
+      deletions: lineStats.deletions,
+
+      branch: this.git.getCurrentBranch(),
+
+      success: meta.success,
+      durationMs: meta.durationMs,
+      errorCode: meta.errorCode,
+
+      fastMode: meta.fastMode,
+    };
+  }
+
+  private countFiles(command: "commit" | "pr", diffOrFiles: string): number {
+    if (command === "commit") {
+      return diffOrFiles.split("\n").filter(Boolean).length;
+    }
+
+    return diffOrFiles
+      .split("\n")
+      .filter((line) => line.startsWith("diff --git")).length;
+  }
+
+  private extractLineStats(text: string): {
+    additions: number;
+    deletions: number;
+  } {
+    let additions = 0;
+    let deletions = 0;
+
+    for (const line of text.split("\n")) {
+      if (line.startsWith("+++") || line.startsWith("---")) {
+        continue;
+      }
+
+      if (line.startsWith("+")) {
+        additions++;
+        continue;
+      }
+
+      if (line.startsWith("-")) {
+        deletions++;
+      }
+    }
+
+    return { additions, deletions };
   }
 
   private renderLargePRTokenEstimate(

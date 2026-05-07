@@ -136,10 +136,27 @@ export type PullRequestCreateResult =
 export interface UsageEntry {
   timestamp: string;
   command: "commit" | "pr";
+
   provider: string;
   reasoningModel: string;
   generationModel: string;
-  estimatedTokens: number;
+
+  usedTokens: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  reasoningTokens?: number;
+  cachedTokens?: number;
+
   fileCount: number;
+  changedLines?: number;
+  additions?: number;
+  deletions?: number;
+
   branch: string;
+
+  success: boolean;
+  durationMs?: number;
+  errorCode?: string;
+
+  fastMode?: boolean;
 }
