@@ -2,7 +2,8 @@ import clipboard from "clipboardy";
 
 import { config } from "../config/config.js";
 import { CommitGenerator } from "../generation/CommitGenerator.js";
-import { ContextBuilder } from "../context/ContextBuilder.js";
+import { CommitContextBuilder } from "../context/CommitContextBuilder.js";
+import { PRContextBuilder } from "../context/PRContextBuilder.js";
 import { GitService } from "../git/GitService.js";
 import { createLLM } from "../llm/index.js";
 import { StagingService } from "../staging/StagingService.js";
@@ -21,7 +22,8 @@ export class App {
   private readonly git: GitService;
   private readonly ai: LLM;
   private readonly staging: StagingService;
-  private readonly context: ContextBuilder;
+  private readonly commitContext: CommitContextBuilder;
+  private readonly prContext: PRContextBuilder;
   private readonly commitGenerator: CommitGenerator;
   private readonly issueRefs: string[] | null;
   private readonly fastMode: boolean;
@@ -33,7 +35,8 @@ export class App {
     this.git = new GitService(config);
     this.ai = createLLM(config);
     this.staging = new StagingService(this.git, config);
-    this.context = new ContextBuilder(this.git, config);
+    this.commitContext = new CommitContextBuilder(this.git, config);
+    this.prContext = new PRContextBuilder(this.git, config);
     this.commitGenerator = new CommitGenerator(this.ai, config);
     this.issueRefs = this.parseIssueRefs();
     this.gitPR = new GitPRService(this.git, config);
@@ -64,7 +67,7 @@ export class App {
       await this.staging.ensureStaged();
 
       const files = this.git.getStagedFileNames();
-      const ctx = this.context.build(files);
+      const ctx = this.commitContext.build(files);
 
       let estimatedTokens = estimateCommitTokens(
         this.commitGenerator,
@@ -143,7 +146,7 @@ export class App {
       process.exit(0);
     }
 
-    const ctx = this.context.build(files);
+    const ctx = this.commitContext.build(files);
 
     UI.renderTokenEstimate(
       estimateCommitTokens(this.commitGenerator, files, ctx),
@@ -164,7 +167,7 @@ export class App {
   }
 
   buildPRContext(baseBranch: string = "origin/main"): PRContext {
-    return this.context.buildPRContext(baseBranch);
+    return this.prContext.build(baseBranch);
   }
 
   private renderPRFailure(result: {
