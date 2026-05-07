@@ -73,7 +73,8 @@ export class App {
       const files = this.git.getStagedFileNames();
       const ctx = this.commitContext.build(files);
 
-      let message = await this.commitGenerator.generate(files, ctx);
+      let generated = await this.commitGenerator.generate(files, ctx);
+      let message = generated.message;
 
       while (true) {
         UI.render(message, config);
@@ -82,20 +83,25 @@ export class App {
 
         if (action === "commit") {
           const fileCount = files.split("\n").filter(Boolean).length;
-          const estimatedTokens = estimateCommitTokens(this.commitGenerator, files, ctx);
-          this.commit(message, fileCount, estimatedTokens);
+          this.commit(message, fileCount, generated.usage.totalTokens);
         }
 
         if (action === "regen") {
           this.commitGenerator.extraInstruction = "";
-          message = await this.commitGenerator.generate(files, ctx);
+
+          generated = await this.commitGenerator.generate(files, ctx);
+          message = generated.message;
+
           continue;
         }
 
         if (action === "refine") {
           const text = await UI.refineInput(config);
           this.commitGenerator.extraInstruction = text;
-          message = await this.commitGenerator.generate(files, ctx);
+
+          generated = await this.commitGenerator.generate(files, ctx);
+          message = generated.message;
+
           continue;
         }
 
@@ -138,10 +144,10 @@ export class App {
 
     this.assertFastModeTokenLimit(estimatedTokens);
 
-    const message = await this.commitGenerator.generate(files, ctx);
+    const generated = await this.commitGenerator.generate(files, ctx);
 
     const fileCount = files.split("\n").filter(Boolean).length;
-    this.commit(message, fileCount, estimatedTokens);
+    this.commit(generated.message, fileCount, generated.usage.totalTokens);
   }
 
   private assertFastModeFileLimit(files: string): void {
@@ -171,7 +177,11 @@ export class App {
     throw new GracefulExit(1);
   }
 
-  private commit(message: string, fileCount: number = 0, estimatedTokens: number = 0): never {
+  private commit(
+    message: string,
+    fileCount: number = 0,
+    usedTokens: number = 0,
+  ): never {
     const finalMessage = this.appendIssueRefs(message);
 
     this.git.createCommit(finalMessage);
@@ -181,7 +191,7 @@ export class App {
       provider: config.llm.provider,
       reasoningModel: config.llm.reasoningModel,
       generationModel: config.llm.generationModel,
-      estimatedTokens,
+      estimatedTokens: usedTokens,
       fileCount,
       branch: this.git.getCurrentBranch(),
     });
@@ -261,16 +271,19 @@ export class App {
 
     this.renderLargePRTokenEstimate(prGenerator, prContext);
 
-    const { title, description } = await prGenerator.generate(prContext);
+    const generatedPR = await prGenerator.generate(prContext);
+    const { title, description } = generatedPR;
 
-    const prTokenEstimate = estimatePRTokens(prGenerator, prContext);
-    const prFileCount = prContext.diff.split("\n").filter((l: string) => l.startsWith("diff --git")).length;
+    const prFileCount = prContext.diff
+      .split("\n")
+      .filter((line) => line.startsWith("diff --git")).length;
+
     this.tracker.record({
       command: "pr",
       provider: config.llm.provider,
       reasoningModel: config.llm.reasoningModel,
       generationModel: config.llm.generationModel,
-      estimatedTokens: prTokenEstimate,
+      estimatedTokens: generatedPR.usage.totalTokens,
       fileCount: prFileCount,
       branch: this.git.getCurrentBranch(),
     });

@@ -1,5 +1,5 @@
 import ora from "ora";
-import type { PRContext } from "../types/types.js";
+import type { PRContext, PRGenerationResult } from "../types/types.js";
 import type { AppConfig } from "../config/config.js";
 import type { LLM } from "../llm/LLM.js";
 
@@ -126,36 +126,55 @@ Analysis:
 ${reasoning}`;
   }
 
-  async generate(
-    prContext: PRContext,
-  ): Promise<{ title: string; description: string }> {
+  async generate(prContext: PRContext): Promise<PRGenerationResult> {
     const spinner = ora("Analyzing PR context...").start();
 
     let reasoning = "";
+    let reasoningUsage: PRGenerationResult["usage"]["reasoning"];
 
     try {
-      reasoning = await this.withRetry(() =>
+      const reasoningResult = await this.withRetry(() =>
         this.ai.complete(this.buildReasoningPrompt(prContext)),
       );
+
+      reasoning = reasoningResult.text;
+      reasoningUsage = reasoningResult.usage;
     } catch {
       reasoning = "";
+      reasoningUsage = undefined;
     }
 
     spinner.text = "Generating PR Markdown...";
 
     let output = "";
+    let generationUsage: PRGenerationResult["usage"]["generation"];
 
     try {
-      output = await this.withRetry(() =>
+      const outputResult = await this.withRetry(() =>
         this.ai.complete(this.buildMessagePrompt(reasoning)),
       );
+
+      output = outputResult.text;
+      generationUsage = outputResult.usage;
     } catch {
       output = "";
+      generationUsage = undefined;
     }
 
     spinner.stop();
 
-    return this.parsePROutput(output);
+    const parsed = this.parsePROutput(output);
+
+    return {
+      ...parsed,
+      usage: {
+        reasoning: reasoningUsage,
+        generation: generationUsage,
+        totalTokens:
+          (reasoningUsage?.totalTokens ?? 0) +
+          (generationUsage?.totalTokens ?? 0),
+      },
+    };
   }
 
   parsePROutput(output: string): { title: string; description: string } {
