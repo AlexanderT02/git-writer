@@ -8,6 +8,7 @@ import type {
   CommitStats,
   UiAction,
 } from "../types/types.js";
+import { GracefulExit } from "../errors.js";
 marked.setOptions({
   renderer: new TerminalRenderer(),
 });
@@ -183,7 +184,7 @@ export class UI {
     console.log(`  ${dim("$")} ${command("gw p -b origin/develop")}`);
     console.log("");
 
-    process.exit(0);
+    throw new GracefulExit(0);
   }
 
   static renderMarkdown(markdown: string): void {

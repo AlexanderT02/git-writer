@@ -9,6 +9,7 @@ import {
   normalizePath,
   treeCheckbox,
 } from "./treePrompt.js";
+import { GracefulExit } from "../errors.js";
 
 export class StagingService {
   constructor(
@@ -252,7 +253,7 @@ export class StagingService {
 
     if (!files.length && !staged) {
       console.log(chalk.gray("\n  ✔ Working tree clean\n"));
-      process.exit(0);
+      throw new GracefulExit(0);
     }
 
     this.printSummary(files, Boolean(staged));
@@ -289,7 +290,7 @@ export class StagingService {
 
     if (!selected.length) {
       console.log(chalk.red("\n  ✖ Nothing selected — aborting\n"));
-      process.exit(0);
+      throw new GracefulExit(0);
     }
 
     this.git.stageFiles(this.expandStageFiles(files, selected));
