@@ -18,6 +18,116 @@ Use it when you want a clean commit message, a quick PR draft, or a local AI-ass
 ![Generated commit message](assets/generated-commit.svg)
 
 ---
+# Git Writer
+
+Git Writer is a small CLI that turns your Git changes into useful text.
+
+It can generate:
+
+- [Conventional Commit](https://www.conventionalcommits.org/) messages from staged changes
+- Pull request titles and Markdown descriptions from branch diffs
+
+Use it when you want a clean commit message, a quick PR draft, or a local AI-assisted Git workflow without leaving your terminal.
+
+[![node](https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Conventional Commits](https://img.shields.io/badge/Conventional_Commits-1.0.0-FE5196?style=flat-square&logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org/)
+
+![Select files to stage](assets/stage-files.svg)
+
+![Generated commit message](assets/generated-commit.svg)
+
+---
+
+## Quick start
+
+Git Writer uses **OpenAI by default**.
+
+You need:
+
+- Node.js `>= 22`
+- an OpenAI API key
+- a Git repository
+
+Install and link the CLI:
+
+```bash
+git clone https://github.com/AlexanderT02/git-commit-writer.git
+cd git-commit-writer
+npm install
+npm run build
+npm link
+```
+
+Set your OpenAI API key:
+
+```bash
+export OPENAI_API_KEY="your_api_key"
+```
+
+Windows PowerShell:
+
+```powershell
+$env:OPENAI_API_KEY="your_api_key"
+```
+
+Windows CMD:
+
+```cmd
+setx OPENAI_API_KEY "your_api_key"
+```
+
+Restart your terminal after using `setx`.
+
+Verify the CLI:
+
+```bash
+gw --help
+```
+
+Generate a commit message:
+
+```bash
+gw commit
+```
+
+Generate a pull request draft:
+
+```bash
+gw pr
+```
+
+---
+
+## Using Ollama instead of OpenAI
+
+If you want local generation, switch the provider to `ollama` in:
+
+```txt
+src/config/config.ts
+```
+
+Example:
+
+```ts
+export const config = {
+  llm: {
+    provider: "ollama",
+    reasoningModel: "llama3.1",
+    generationModel: "llama3.1",
+  },
+};
+```
+
+Start Ollama:
+
+```bash
+ollama serve
+```
+
+With Ollama, generation stays local and no OpenAI API key is required.
+
+---
 
 ## What it does
 
@@ -241,35 +351,13 @@ This update expands the CLI from commit-message generation into a broader Git te
 
 ## Configuration
 
-Runtime configuration lives in:
+Configuration lives in:
 
 ```txt
 src/config/config.ts
 ```
 
-Use it to configure:
-
-- LLM provider
-- reasoning and generation models
-- Git diff limits
-- context limits
-- commit message constraints
-- staging prompt behavior
-- UI labels
-
-### OpenAI
-
-```ts
-export const config = {
-  llm: {
-    provider: "openai",
-    reasoningModel: "gpt-4o-mini",
-    generationModel: "gpt-4o-mini",
-  },
-};
-```
-
-Set your API key:
+Git Writer uses **OpenAI by default**. Set your API key before running the CLI:
 
 ```bash
 export OPENAI_API_KEY="your_api_key"
@@ -289,7 +377,7 @@ setx OPENAI_API_KEY "your_api_key"
 
 Restart your terminal after using `setx`.
 
-### Ollama
+To use local generation instead, switch the provider to `ollama`:
 
 ```ts
 export const config = {
@@ -301,13 +389,13 @@ export const config = {
 };
 ```
 
-Start Ollama:
+Then start Ollama:
 
 ```bash
 ollama serve
 ```
 
-Using Ollama keeps generation local.
+You can also adjust models, Git diff limits, context budget, commit rules, staging behavior, and UI labels in `src/config/config.ts`.
 
 ---
 
