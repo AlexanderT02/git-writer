@@ -1,5 +1,4 @@
 import ora from "ora";
-import { UI } from "../ui/UI.js";
 import type { PRContext } from "../types/types.js";
 import type { AppConfig } from "../config/config.js";
 import type { LLM } from "../llm/LLM.js";
@@ -40,24 +39,37 @@ ${sections.join("\n\n")}`;
   }
 
   buildMessagePrompt(reasoning: string): string {
-    // The second pass turns the analysis into a short, review-friendly PR body.
-    return `Based on the analysis below, generate a professional PR title and description in Markdown.
+    return `Based on the analysis below, generate a concise GitHub pull request.
 
-Requirements:
+  Return exactly this format:
 
-### PR Title
-- One concise sentence (max 15 words) summarizing the main purpose
+  TITLE:
+  <one concise PR title, max 15 words>
 
-### PR Description
-- Short paragraph explaining the purpose of the PR
-- Bullet list of key changes
-- Reasoning for changes
-- Highlight potential risks or breaking changes
-- Use clear Markdown headings and bullets
-- Do not use code fences; only plain text inside Markdown
+  BODY:
+  ## Summary
+  <1 short paragraph>
 
-Analysis:
-${reasoning}`;
+  ## Changes
+  - <key change>
+  - <key change>
+  - <key change>
+
+  ## Risks
+  - <risk, breaking change, or "No major risks identified">
+
+  Rules:
+  - Do not add text before TITLE:
+  - Do not use "# PR Title"
+  - Do not use "# PR Description"
+  - Do not include the title in BODY
+  - Do not wrap the output in code fences
+  - Keep it short but complete
+  - Mention breaking changes only if clearly supported by the changes
+  - Do not invent tests, migrations, or behavior
+
+  Analysis:
+  ${reasoning}`;
   }
 
   async generate(
@@ -86,25 +98,69 @@ ${reasoning}`;
 
     spinner.stop();
 
-    // Show the raw generated Markdown before extracting title/body.
-    UI.render(output, this.config);
+    return this.parsePROutput(output);
+  }
+  parsePROutput(output: string): { title: string; description: string } {
+    const cleaned = this.cleanMarkdown(output);
 
-    const lines = output.split("\n").filter(Boolean);
-
-    // The prompt asks for fixed headings, so we can split title and description reliably.
-    const titleIndex = lines.findIndex((line) => line.startsWith("### PR Title"));
-    const descIndex = lines.findIndex((line) =>
-      line.startsWith("### PR Description"),
+    const titleBodyMatch = cleaned.match(
+      /TITLE:\s*([\s\S]*?)\n\s*BODY:\s*([\s\S]*)/i,
     );
 
-    const title = titleIndex !== -1 && descIndex !== -1
-      ? lines.slice(titleIndex + 1, descIndex).join(" ").trim()
-      : "PR Update";
+    if (titleBodyMatch) {
+      return {
+        title: this.cleanTitle(titleBodyMatch[1] ?? ""),
+        description: this.cleanBody(titleBodyMatch[2] ?? ""),
+      };
+    }
 
-    const description = descIndex !== -1
-      ? lines.slice(descIndex + 1).join("\n").trim()
-      : lines.join("\n").trim();
+    const headingMatch = cleaned.match(
+      /#+\s*PR Title\s*\n([\s\S]*?)\n#+\s*PR Description\s*\n([\s\S]*)/i,
+    );
 
-    return { title, description };
+    if (headingMatch) {
+      return {
+        title: this.cleanTitle(headingMatch[1] ?? ""),
+        description: this.cleanBody(headingMatch[2] ?? ""),
+      };
+    }
+
+    const lines = cleaned
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    return {
+      title: this.cleanTitle(lines[0] ?? "PR Update"),
+      description: this.cleanBody(lines.slice(1).join("\n")),
+    };
+  }
+
+  private cleanMarkdown(text: string): string {
+    return text
+      .replace(/```(?:markdown|md)?/gi, "")
+      .replace(/```/g, "")
+      .trim();
+  }
+
+  private cleanTitle(title: string): string {
+    return title
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join(" ")
+      .replace(/^[-*]\s*/, "")
+      .replace(/^#+\s*/, "")
+      .replace(/^PR Title:?\s*/i, "")
+      .replace(/^TITLE:?\s*/i, "")
+      .trim() || "PR Update";
+  }
+
+  private cleanBody(body: string): string {
+    return body
+      .replace(/^BODY:\s*/i, "")
+      .replace(/^#+\s*PR Description\s*/i, "")
+      .replace(/^#+\s*PR Title\s*[\s\S]*?(?=^#+\s|$)/im, "")
+      .trim();
   }
 }
