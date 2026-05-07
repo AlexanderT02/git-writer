@@ -3,6 +3,7 @@ import { UI } from "../ui/UI.js";
 import type { AppConfig } from "../config/config.js";
 import type { CommitContext } from "../types/types.js";
 import type { LLM } from "../llm/LLM.js";
+import { estimateLLMCall } from "../llm/tokenEstimate.js";
 
 export class CommitGenerator {
   extraInstruction = "";
@@ -24,7 +25,6 @@ export class CommitGenerator {
       _diff,
     } = context;
 
-    // Keep the reasoning prompt focused on intent, not final wording.
     const sections = [
       `Branch: ${branch}${issue ? ` (${issue})` : ""}`,
       stagedStats && `Stats: ${stagedStats}`,
@@ -101,12 +101,10 @@ ${sections}`;
 
     const diff = _diff || "";
 
-    // Mention breaking changes only when the diff gives a real signal.
     const breakingHint = /breaking change|BREAKING/i.test(diff)
       ? "The diff mentions breaking changes. Include BREAKING CHANGE only if a public API, schema, interface, or contract truly changed."
       : "";
 
-    // The final prompt adds style examples and optional user guidance.
     const sections = [
       `Branch: ${branch}${issue ? ` (${issue})` : ""}`,
       stagedStats && `Stats: ${stagedStats}`,
@@ -185,30 +183,39 @@ ${sections}`;
   }
 
   async generate(files: string, context: CommitContext): Promise<string> {
+    const reasoningPrompt = this.buildReasoningPrompt(files, context);
+    const reasoningEstimate = estimateLLMCall(reasoningPrompt, 700);
+
+    UI.renderTokenEstimate(reasoningEstimate.totalTokens, "Analysis tokens");
+
     const spinner = ora("Analysing intent...").start();
+
     let reasoning = "";
 
     try {
-      // First pass extracts the dominant intent.
-      // If this fails, the final prompt can still work from raw context.
-      reasoning = await this.ai.complete(
-        this.buildReasoningPrompt(files, context),
-      );
+      reasoning = await this.ai.complete(reasoningPrompt);
     } catch {
       reasoning = "";
     }
 
-    spinner.text = "Generating commit message...";
+    const messagePrompt = this.buildMessagePrompt(files, context, reasoning);
+    const messageEstimate = estimateLLMCall(messagePrompt, 350);
 
-    const result = await this.ai.stream(
-      this.buildMessagePrompt(files, context, reasoning),
-      (text) => {
-        spinner.stop();
-        UI.render(text, this.config);
-      },
-    );
+    const totalTokens =
+      reasoningEstimate.totalTokens + messageEstimate.totalTokens;
 
     spinner.stop();
+
+    UI.renderTokenEstimate(totalTokens);
+
+    const streamSpinner = ora("Generating commit message...").start();
+
+    const result = await this.ai.stream(messagePrompt, (text) => {
+      streamSpinner.stop();
+      UI.render(text, this.config);
+    });
+
+    streamSpinner.stop();
 
     return this.sanitizeCommitMessage(result);
   }
