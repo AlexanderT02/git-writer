@@ -50,3 +50,18 @@ export type UiAction =
   | "refine"
   | "copy"
   | "cancel";
+  
+export type BranchDiffInfo = {
+  branch: string;
+  issue: string | null;
+  diff: string;
+  commits: string;
+};
+
+export type PRContext = {
+  branch: string;
+  issue: string | null;
+  commits: string;       
+  diff: string;      
+  fileContexts: string;  
+};

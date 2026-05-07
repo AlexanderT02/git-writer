@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from "child_process";
 import chalk from "chalk";
 import type { AppConfig } from "../config/config.js";
-import type { BranchContext, CommitStats } from "../types/types.js";
+import type { BranchContext, CommitStats, BranchDiffInfo } from "../types/types.js";
 
 type GitOptions = {
   trim?: boolean;
@@ -219,6 +219,35 @@ export class GitService {
     return [...symbols]
       .slice(0, this.config.git.maxChangedSymbols)
       .join("\n");
+  }
+
+  getAllBranches(): string[] {
+    const raw = this.runGitOrEmpty(["branch", "--all", "--format=%(refname:short)"]);
+    return raw.split("\n").map((b) => b.trim()).filter(Boolean);
+  }
+
+  getBranchSummary(branch: string): BranchDiffInfo {
+    return this.getBranchDiffInfo(branch);
+  }
+
+  getBranchDiffInfo(baseBranch: string = "origin/main"): BranchDiffInfo {
+    const branchContext = this.getBranchContext();
+
+    const commits = this.runGitOrEmpty([
+      "log",
+      `${baseBranch}..HEAD`,
+      "--oneline",
+      "--no-merges",
+    ]);
+
+    const diff = this.runGitOrEmpty(["diff", `${baseBranch}..HEAD`]);
+
+    return {
+      branch: branchContext.branch,
+      issue: branchContext.issue,
+      diff,
+      commits,
+    };
   }
 
   // Mutations

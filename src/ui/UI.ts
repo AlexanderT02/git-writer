@@ -33,6 +33,18 @@ export class UI {
     });
   }
 
+  static async prActionMenu(): Promise<"copy" | "create" | "cancel"> {
+    return select<"copy" | "create" | "cancel">({
+      message: "Choose an action for this PR:",
+      choices: [
+        { name: "Copy PR to clipboard", value: "copy" },
+        { name: "Create PR via GitHub CLI", value: "create" },
+        new Separator(),
+        { name: "Cancel", value: "cancel" },
+      ],
+    });
+  }
+
   static async refineInput(config: AppConfig): Promise<string> {
     const text = await input({
       message: config.ui.refineMessage,
@@ -53,5 +65,12 @@ export class UI {
     });
 
     return text.trim();
+  }
+
+  static async selectBranch(branches: string[], message: string): Promise<string> {
+    return select({
+      message,
+      choices: branches,
+    });
   }
 }
