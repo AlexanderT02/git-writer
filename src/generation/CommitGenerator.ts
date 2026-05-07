@@ -1,7 +1,7 @@
 import ora from "ora";
 import { UI } from "../ui/UI.js";
 import type { AppConfig } from "../config/config.js";
-import type { CommitContext } from "../types/types.js";
+import type { CommitContext, CommitGenerationResult } from "../types/types.js";
 import type { LLM } from "../llm/LLM.js";
 
 export class CommitGenerator {
@@ -236,17 +236,27 @@ ${sections}`;
       .trim();
   }
 
-  async generate(files: string, context: CommitContext): Promise<string> {
+  async generate(
+    files: string,
+    context: CommitContext,
+  ): Promise<CommitGenerationResult> {
     const reasoningPrompt = this.buildReasoningPrompt(files, context);
 
     const spinner = ora("Analysing intent...").start();
 
     let reasoning = "";
+    let reasoningUsage: CommitGenerationResult["usage"]["reasoning"];
 
     try {
-      reasoning = await this.withRetry(() => this.ai.complete(reasoningPrompt));
+      const reasoningResult = await this.withRetry(() =>
+        this.ai.complete(reasoningPrompt),
+      );
+
+      reasoning = reasoningResult.text;
+      reasoningUsage = reasoningResult.usage;
     } catch {
       reasoning = "";
+      reasoningUsage = undefined;
     }
 
     const messagePrompt = this.buildMessagePrompt(files, context, reasoning);
@@ -264,6 +274,15 @@ ${sections}`;
 
     streamSpinner.stop();
 
-    return this.sanitizeCommitMessage(result);
+    return {
+      message: this.sanitizeCommitMessage(result.text),
+      usage: {
+        reasoning: reasoningUsage,
+        generation: result.usage,
+        totalTokens:
+          (reasoningUsage?.totalTokens ?? 0) +
+          (result.usage?.totalTokens ?? 0),
+      },
+    };
   }
 }
