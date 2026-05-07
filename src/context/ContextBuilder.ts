@@ -3,6 +3,7 @@ import type {
   CommitContext,
   FileContextResult,
   StagedEntry,
+  PRContext,
 } from "../types/types.js";
 import type { GitService } from "../git/GitService.js";
 
@@ -192,5 +193,37 @@ export class ContextBuilder {
   isBinary(file: string): boolean {
     const out = this.gitService.getCachedFileNumstat(file);
     return out.startsWith("-\t-\t");
+  }
+
+  buildPRContext(baseBranch: string = "origin/main"): PRContext {
+    const branchCtx = this.gitService.getBranchContext();
+
+    const commits = this.gitService.runGitOrEmpty([
+      "log",
+      `${baseBranch}..HEAD`,
+      "--oneline",
+      "--no-merges",
+    ]);
+
+    const diff = this.gitService.runGitOrEmpty(["diff", `${baseBranch}..HEAD`]);
+
+    const stagedFiles = this.getStagedEntries();
+    const fileContexts = stagedFiles.map((entry) => {
+      const before = this.getFileContent("HEAD", entry.file, entry.status);
+      const after = this.getFileContent("INDEX", entry.file, entry.status);
+
+      if (entry.status === "D") return `=== ${entry.file} [deleted] ===\n--- DELETED FILE ---`;
+      if (before && after && before.length + after.length <= this.config.context.smallFileThreshold)
+        return `=== ${entry.file} [full] ===\n--- BEFORE ---\n${before}\n--- AFTER ---\n${after}`;
+      return this.gitService.getCachedFileDiff(entry.file);
+    });
+
+    return {
+      branch: branchCtx.branch,
+      issue: branchCtx.issue,
+      commits,
+      diff,
+      fileContexts: fileContexts.join("\n\n"),
+    };
   }
 }
