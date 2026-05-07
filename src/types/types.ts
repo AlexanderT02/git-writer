@@ -1,5 +1,37 @@
 export type GitStatusCode = "M" | "A" | "D" | "R" | "?" | string;
 
+export type LLMUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  reasoningTokens?: number;
+  cachedTokens?: number;
+};
+
+export type LLMResult = {
+  text: string;
+  usage?: LLMUsage;
+};
+
+export type CommitGenerationResult = {
+  message: string;
+  usage: {
+    reasoning?: LLMUsage;
+    generation?: LLMUsage;
+    totalTokens: number;
+  };
+};
+
+export type PRGenerationResult = {
+  title: string;
+  description: string;
+  usage: {
+    reasoning?: LLMUsage;
+    generation?: LLMUsage;
+    totalTokens: number;
+  };
+};
+
 export interface StatusEntry {
   file: string;
   code: GitStatusCode;
