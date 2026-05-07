@@ -1,7 +1,11 @@
 import { execFileSync, spawnSync } from "child_process";
 import chalk from "chalk";
 import type { AppConfig } from "../config/config.js";
-import type { BranchContext, CommitStats, BranchDiffInfo } from "../types/types.js";
+import type {
+  BranchContext,
+  CommitStats,
+  BranchPRSummary,
+} from "../types/types.js";
 
 type GitOptions = {
   trim?: boolean;
@@ -222,32 +226,58 @@ export class GitService {
   }
 
   getAllBranches(): string[] {
-    const raw = this.runGitOrEmpty(["branch", "--all", "--format=%(refname:short)"]);
-    return raw.split("\n").map((b) => b.trim()).filter(Boolean);
-  }
-
-  getBranchSummary(branch: string): BranchDiffInfo {
-    return this.getBranchDiffInfo(branch);
-  }
-
-  getBranchDiffInfo(baseBranch: string = "origin/main"): BranchDiffInfo {
-    const branchContext = this.getBranchContext();
-
-    const commits = this.runGitOrEmpty([
-      "log",
-      `${baseBranch}..HEAD`,
-      "--oneline",
-      "--no-merges",
+    const raw = this.runGitOrEmpty([
+      "branch",
+      "--all",
+      "--format=%(refname:short)",
     ]);
 
-    const diff = this.runGitOrEmpty(["diff", `${baseBranch}..HEAD`]);
+    const current = this.getBranch();
+
+    return raw
+      .split("\n")
+      .map((branch) => branch.trim())
+      .filter(Boolean)
+      .filter((branch) => !branch.includes("HEAD"))
+      .filter((branch) => branch !== current)
+      .filter((branch, index, all) => all.indexOf(branch) === index);
+  }
+
+  getBranchPRSummary(baseBranch: string): BranchPRSummary {
+    const commitsRaw = this.runGitOrEmpty([
+      "rev-list",
+      "--count",
+      `${baseBranch}..HEAD`,
+    ]);
+
+    const shortStat = this.runGitOrEmpty([
+      "diff",
+      "--shortstat",
+      `${baseBranch}..HEAD`,
+    ]);
+
+    const match = shortStat.match(
+      /(?:(\d+) files? changed)?(?:,?\s*(\d+) insertions?\(\+\))?(?:,?\s*(\d+) deletions?\(-\))?/,
+    );
 
     return {
-      branch: branchContext.branch,
-      issue: branchContext.issue,
-      diff,
-      commits,
+      branch: baseBranch,
+      commits: Number(commitsRaw || 0),
+      files: Number(match?.[1] || 0),
+      insertions: Number(match?.[2] || 0),
+      deletions: Number(match?.[3] || 0),
     };
+  }
+
+  getBranchPRSummaries(): BranchPRSummary[] {
+    return this.getAllBranches()
+      .map((branch) => this.getBranchPRSummary(branch))
+      .filter((summary) =>
+        summary.commits > 0 ||
+      summary.files > 0 ||
+      summary.insertions > 0 ||
+      summary.deletions > 0,
+      );
   }
 
   // Mutations
