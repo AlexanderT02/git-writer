@@ -1,6 +1,6 @@
-import type { AppConfig } from "../config/config.js";
-import type { LLMResult, LLMUsage } from "../types/types.js";
-import type { LLM } from "./LLM.js";
+import type { AppConfig } from "../../config/config.js";
+import type { LLMResult, LLMUsage } from "../../types/types.js";
+import type { LLM } from "../LLM.js";
 
 type OllamaGenerateResponse = {
   response?: string;

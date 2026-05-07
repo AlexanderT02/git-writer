@@ -1,7 +1,7 @@
 import OpenAI from "openai";
-import type { AppConfig } from "../config/config.js";
-import type { LLM } from "./LLM.js";
-import type { LLMResult, LLMUsage } from "../types/types.js";
+import type { AppConfig } from "../../config/config.js";
+import type { LLM } from "../LLM.js";
+import type { LLMResult, LLMUsage } from "../../types/types.js";
 
 export class OpenAIProvider implements LLM {
   private readonly client: OpenAI;

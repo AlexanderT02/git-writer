@@ -1,7 +1,7 @@
 import type { AppConfig, LLMProviderName } from "../config/config.js";
 import type { LLM } from "./LLM.js";
-import { OllamaProvider } from "./OllamaProvider.js";
-import { OpenAIProvider } from "./OpenAIProvider.js";
+import { OllamaProvider } from "./provider/OllamaProvider.js";
+import { OpenAIProvider } from "./provider/OpenAIProvider.js";
 
 type LLMProviderConstructor = new (config: AppConfig) => LLM;
 
