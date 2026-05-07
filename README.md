@@ -1,26 +1,6 @@
 # Git Writer
 
-Git Writer is a small CLI that turns your Git changes into useful text.
-
-It can generate:
-
-- [Conventional Commit](https://www.conventionalcommits.org/) messages from staged changes
-- Pull request titles and Markdown descriptions from branch diffs
-
-Use it when you want a clean commit message, a quick PR draft, or a local AI-assisted Git workflow without leaving your terminal.
-
-[![node](https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Conventional Commits](https://img.shields.io/badge/Conventional_Commits-1.0.0-FE5196?style=flat-square&logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org/)
-
-![Select files to stage](assets/stage-files.svg)
-
-![Generated commit message](assets/generated-commit.svg)
-
----
-# Git Writer
-
-Git Writer is a small CLI that turns your Git changes into useful text.
+Git Writer is a small CLI that turns your local Git changes into useful text.
 
 It can generate:
 
