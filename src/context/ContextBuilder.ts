@@ -17,14 +17,14 @@ export class ContextBuilder {
     const fileList = files.split("\n").filter(Boolean);
     const fileCount = fileList.length;
 
-    const branchCtx = this.gitService.getBranchContext();
-    const stagedStats = this.gitService.getStagedStats();
-    const recentCommits = this.gitService.getRecentCommits(
+    const branchCtx = this.gitService.getCurrentBranchContext();
+    const stagedStats = this.gitService.getStagedShortStat();
+    const recentCommits = this.gitService.getRecentCommitLines(
       this.config.git.recentCommitCount,
     );
 
     const stagedFileSummaries =
-      fileCount > 1 ? this.gitService.getStagedFileSummaries() : "";
+      fileCount > 1 ? this.gitService.getStagedFileSummaryLines() : "";
 
     const recentStyleHints =
       fileCount > 3
@@ -37,10 +37,10 @@ export class ContextBuilder {
     const hasAnyTruncated = fileContexts.some((ctx) => ctx.level < 2);
 
     const changedSymbols = hasAnyTruncated
-      ? this.gitService.getChangedSymbols()
+      ? this.gitService.getChangedSymbolsFromStagedDiff()
       : "";
 
-    const _diff = this.gitService.getDiff();
+    const _diff = this.gitService.getStagedDiffForPrompt();
 
     return {
       ...branchCtx,
@@ -124,7 +124,7 @@ export class ContextBuilder {
   }
 
   level0(entry: StagedEntry): FileContextResult {
-    const diff = this.gitService.getCachedFileDiff(entry.file);
+    const diff = this.gitService.getStagedFileDiff(entry.file);
 
     return {
       level: 0,
@@ -135,7 +135,7 @@ export class ContextBuilder {
   }
 
   level1(entry: StagedEntry): FileContextResult {
-    const diff = this.gitService.getCachedFileDiffWithContext(
+    const diff = this.gitService.getStagedFileDiffWithContext(
       entry.file,
       this.config.context.contextLines,
     );
@@ -164,7 +164,7 @@ export class ContextBuilder {
   }
 
   getStagedEntries(): StagedEntry[] {
-    const raw = this.gitService.getCachedNameStatus().trim();
+    const raw = this.gitService.getStagedNameStatus().trim();
 
     if (!raw) return [];
 
@@ -183,20 +183,20 @@ export class ContextBuilder {
 
     const gitRef = ref === "HEAD" ? `HEAD:${file}` : `:${file}`;
 
-    if (!this.gitService.gitRefExists(gitRef)) {
+    if (!this.gitService.refExists(gitRef)) {
       return "";
     }
 
-    return this.gitService.getFileFromGitRef(gitRef);
+    return this.gitService.readFileFromRef(gitRef);
   }
 
   isBinary(file: string): boolean {
-    const out = this.gitService.getCachedFileNumstat(file);
+    const out = this.gitService.getStagedFileNumstat(file);
     return out.startsWith("-\t-\t");
   }
 
   buildPRContext(baseBranch: string = "origin/main"): PRContext {
-    const branchCtx = this.gitService.getBranchContext();
+    const branchCtx = this.gitService.getCurrentBranchContext();
 
     const commits = this.gitService.runGitOrEmpty([
       "log",

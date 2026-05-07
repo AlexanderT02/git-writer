@@ -17,7 +17,7 @@ export class StagingService {
   ) {}
 
   parseStatusDetailed(): StatusEntry[] {
-    const status = this.git.getDetailedStatus();
+    const status = this.git.getWorkingTreeStatus();
 
     const entries = status
       ? status
@@ -47,7 +47,7 @@ export class StagingService {
   }
 
   private getStagedDeleteEntries(): StatusEntry[] {
-    const status = this.git.getCachedNameStatus();
+    const status = this.git.getStagedNameStatus();
 
     if (!status) return [];
 
@@ -171,8 +171,8 @@ export class StagingService {
       }
     };
 
-    addGitNumstat(this.git.getCachedNumstat());
-    addGitNumstat(this.git.getWorkingTreeNumstat());
+    addGitNumstat(this.git.getStagedNumstat());
+    addGitNumstat(this.git.getUnstagedNumstat());
 
     for (const file of files) {
       const path = normalizePath(file.file);
@@ -247,7 +247,7 @@ export class StagingService {
   }
 
   async ensureStaged(): Promise<void> {
-    const staged = this.git.getStagedFiles().trim();
+    const staged = this.git.getStagedFileNames().trim();
     const files = this.parseStatusDetailed();
 
     if (!files.length && !staged) {
@@ -274,7 +274,7 @@ export class StagingService {
     }
 
     if (selected.includes("__ALL__")) {
-      this.git.add(this.expandStageFiles(files, files.map((file) => file.file)));
+      this.git.stageFiles(this.expandStageFiles(files, files.map((file) => file.file)));
 
       console.log(
         chalk.green(
@@ -292,7 +292,7 @@ export class StagingService {
       process.exit(0);
     }
 
-    this.git.add(this.expandStageFiles(files, selected));
+    this.git.stageFiles(this.expandStageFiles(files, selected));
 
     console.log(
       chalk.green(

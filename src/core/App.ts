@@ -10,6 +10,8 @@ import { UI } from "../ui/UI.js";
 import type { LLM } from "../llm/LLM.js";
 import type { PRContext } from "../types/types.js";
 import { PRGenerator } from "../generation/PRGenerator.js";
+import { GitPRService } from "../git/GitPRService.js";
+import { GitHubCLIService } from "../git/GitHubCliService.js";
 
 export class App {
   private readonly git: GitService;
@@ -19,6 +21,8 @@ export class App {
   private readonly commitGenerator: CommitGenerator;
   private readonly issueRefs: string[] | null;
   private readonly fastMode: boolean;
+  private readonly gitPR: GitPRService;
+  private readonly githubCli: GitHubCLIService;
 
   constructor(fastMode = false) {
     this.fastMode = fastMode;
@@ -28,6 +32,8 @@ export class App {
     this.context = new ContextBuilder(this.git, config);
     this.commitGenerator = new CommitGenerator(this.ai, config);
     this.issueRefs = this.parseIssueRefs();
+    this.gitPR = new GitPRService(this.git, config);
+    this.githubCli = new GitHubCLIService(this.git);
   }
 
   parseIssueRefs(): string[] | null {
@@ -53,7 +59,7 @@ export class App {
     while (true) {
       await this.staging.ensureStaged();
 
-      const files = this.git.getStagedFiles();
+      const files = this.git.getStagedFileNames();
       const ctx = this.context.build(files);
       let message = await this.commitGenerator.generate(files, ctx);
 
@@ -97,9 +103,9 @@ export class App {
   }
 
   private async runCommitFast(): Promise<void> {
-    this.git.add(["."]);
+    this.git.stageFiles(["."]);
 
-    const files = this.git.getStagedFiles();
+    const files = this.git.getStagedFileNames();
 
     if (!files.trim()) {
       UI.renderNothingToCommit();
@@ -115,8 +121,8 @@ export class App {
   private commit(message: string): never {
     const finalMessage = this.appendIssueRefs(message);
 
-    this.git.commit(finalMessage);
-    UI.renderCommitCreated(this.git.getLastCommitSummary());
+    this.git.createCommit(finalMessage);
+    UI.renderCommitCreated(this.git.getLastCommitStats());
 
     process.exit(0);
   }
@@ -129,7 +135,7 @@ export class App {
     const selectedBaseBranch =
       baseBranch ??
     await UI.selectBranch(
-      this.git.getBranchPRSummaries(),
+      this.gitPR.getAvailablePRBaseSummaries(),
       "Select base branch for PR:",
     );
 
@@ -149,7 +155,7 @@ export class App {
       }
 
       if (action === "create") {
-        const url = this.git.createPullRequestViaGithubCli(
+        const url = this.githubCli.createPullRequestFromCurrentBranch(
           selectedBaseBranch,
           title,
           description,
