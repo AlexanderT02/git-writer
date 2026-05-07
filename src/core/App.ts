@@ -1,4 +1,3 @@
-import chalk from "chalk";
 import clipboard from "clipboardy";
 
 import { config } from "../config/config.js";
@@ -11,12 +10,13 @@ import { UI } from "../ui/UI.js";
 import type { LLM } from "../llm/LLM.js";
 import type { PRContext } from "../types/types.js";
 import { PRGenerator } from "../generation/PRGenerator.js";
+
 export class App {
   private readonly git: GitService;
   private readonly ai: LLM;
   private readonly staging: StagingService;
   private readonly context: ContextBuilder;
-  private readonly generator: CommitGenerator;
+  private readonly commitGenerator: CommitGenerator;
   private readonly issueRefs: string[] | null;
   private readonly fastMode: boolean;
 
@@ -26,32 +26,36 @@ export class App {
     this.ai = createLLM(config);
     this.staging = new StagingService(this.git, config);
     this.context = new ContextBuilder(this.git, config);
-    this.generator = new CommitGenerator(this.ai, config);
+    this.commitGenerator = new CommitGenerator(this.ai, config);
     this.issueRefs = this.parseIssueRefs();
   }
 
   parseIssueRefs(): string[] | null {
     const args = process.argv.slice(2);
     const nums = args.filter((arg) => /^\d+$/.test(arg));
+
     if (!nums.length) return null;
+
     return nums.map((num) => `#${num}`);
   }
 
   appendIssueRefs(message: string): string {
     if (!this.issueRefs) return message;
+
     return `${message}\n\nrefs ${this.issueRefs.join(", ")}`;
   }
 
   async runCommitInteractive(): Promise<void> {
     if (this.fastMode) {
-      return this.runCommitInteractiveFast();
+      return this.runCommitFast();
     }
+
     while (true) {
       await this.staging.ensureStaged();
 
       const files = this.git.getStagedFiles();
       const ctx = this.context.build(files);
-      let message = await this.generator.generate(files, ctx);
+      let message = await this.commitGenerator.generate(files, ctx);
 
       while (true) {
         UI.render(message, config);
@@ -59,39 +63,19 @@ export class App {
         const action = await UI.actionMenu(config);
 
         if (action === "commit") {
-          const finalMessage = this.appendIssueRefs(message);
-          this.git.commit(finalMessage);
-
-          const stats = this.git.getLastCommitSummary();
-
-          if (stats) {
-            console.log(
-              chalk.green(
-                "\n✔  Commit created  " +
-                  chalk.dim("(") +
-                  `${chalk.cyan(stats.files)} files  ` +
-                  `${chalk.green("+" + stats.insertions)}  ` +
-                  `${chalk.red("-" + stats.deletions)}` +
-                  chalk.dim(")"),
-              ),
-            );
-          } else {
-            console.log(chalk.green("\n✔  Commit created\n"));
-          }
-
-          process.exit(0);
+          this.commit(message);
         }
 
         if (action === "regen") {
-          this.generator.extraInstruction = "";
-          message = await this.generator.generate(files, ctx);
+          this.commitGenerator.extraInstruction = "";
+          message = await this.commitGenerator.generate(files, ctx);
           continue;
         }
 
         if (action === "refine") {
           const text = await UI.refineInput(config);
-          this.generator.extraInstruction = text;
-          message = await this.generator.generate(files, ctx);
+          this.commitGenerator.extraInstruction = text;
+          message = await this.commitGenerator.generate(files, ctx);
           continue;
         }
 
@@ -102,46 +86,37 @@ export class App {
 
         if (action === "copy") {
           await clipboard.write(message);
-          console.log(chalk.gray("\n✔ Copied to clipboard\n"));
+          UI.renderCopied();
           continue;
         }
 
-        console.log(chalk.gray("\nCancelled\n"));
+        UI.renderCancelled();
         process.exit(0);
       }
     }
   }
 
-  private async runCommitInteractiveFast(): Promise<void> {
+  private async runCommitFast(): Promise<void> {
     this.git.add(["."]);
 
     const files = this.git.getStagedFiles();
+
     if (!files.trim()) {
-      console.log(chalk.gray("\n  Nothing to commit\n"));
+      UI.renderNothingToCommit();
       process.exit(0);
     }
 
     const ctx = this.context.build(files);
-    const message = await this.generator.generate(files, ctx);
+    const message = await this.commitGenerator.generate(files, ctx);
+
+    this.commit(message);
+  }
+
+  private commit(message: string): never {
     const finalMessage = this.appendIssueRefs(message);
 
     this.git.commit(finalMessage);
-
-    const stats = this.git.getLastCommitSummary();
-    if (stats) {
-      console.log(
-        chalk.green(
-          "\n✔  Commit created  " +
-            chalk.dim("(") +
-            `${chalk.cyan(stats.files)} files  ` +
-            `${chalk.green("+" + stats.insertions)}  ` +
-            `${chalk.red("-" + stats.deletions)}` +
-            chalk.dim(")"),
-        ),
-      );
-    } else {
-      console.log(chalk.green("\n✔  Commit created\n"));
-    }
+    UI.renderCommitCreated(this.git.getLastCommitSummary());
 
     process.exit(0);
   }
@@ -159,33 +134,27 @@ export class App {
       );
 
     const prContext = this.buildPRContext(selectedBaseBranch);
-
     const prGenerator = new PRGenerator(this.ai, config);
     const { title, description } = await prGenerator.generate(prContext);
 
     while (true) {
-      console.log(chalk.blue("=== Pull Request Preview ===\n"));
-      console.log(chalk.green("Base:"), selectedBaseBranch);
-      console.log(chalk.green("Title:"), title);
-      console.log(chalk.green("Description:\n"), description);
+      UI.renderPRPreview(selectedBaseBranch, title, description);
 
       const action = await UI.prActionMenu();
 
       if (action === "copy") {
         await clipboard.write(`# ${title}\n\n${description}`);
-        console.log(chalk.gray("\n✔ Copied PR to clipboard\n"));
+        UI.renderCopied("Copied PR to clipboard");
         continue;
       }
 
       if (action === "create") {
-        console.log(chalk.gray("\n✔ PR would be created via GitHub CLI here\n"));
+        UI.renderInfo("PR would be created via GitHub CLI here");
         process.exit(0);
       }
 
-      if (action === "cancel") {
-        console.log(chalk.gray("\nCancelled\n"));
-        process.exit(0);
-      }
+      UI.renderCancelled();
+      process.exit(0);
     }
   }
 }

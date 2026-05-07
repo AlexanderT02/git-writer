@@ -1,7 +1,7 @@
 import chalk from "chalk";
 import { editor, input, select, Separator } from "@inquirer/prompts";
 import type { AppConfig } from "../config/config.js";
-import type { UiAction } from "../types/types.js";
+import type { CommitStats, UiAction } from "../types/types.js";
 
 export class UI {
   static render(msg: string, config: AppConfig): void {
@@ -16,6 +16,52 @@ export class UI {
     console.log(border + "\n");
     console.log(msg || chalk.dim(config.ui.generatingPlaceholder));
     console.log("\n" + border);
+  }
+
+  static renderPRPreview(
+    baseBranch: string,
+    title: string,
+    description: string,
+  ): void {
+    console.log("");
+    console.log(chalk.bold.blue("Pull Request Preview"));
+    console.log(chalk.dim("─".repeat(48)));
+    console.log(`${chalk.green("Base:")} ${baseBranch}`);
+    console.log(`${chalk.green("Title:")} ${title}`);
+    console.log("");
+    console.log(chalk.green("Description:"));
+    console.log(description);
+    console.log(chalk.dim("─".repeat(48)));
+  }
+
+  static renderCommitCreated(stats: CommitStats | null): void {
+    if (!stats) {
+      console.log(chalk.green("\n✔  Commit created\n"));
+      return;
+    }
+
+    console.log(
+      chalk.green(
+        "\n✔  Commit created  " +
+          chalk.dim("(") +
+          `${chalk.cyan(stats.files)} files  ` +
+          `${chalk.green("+" + stats.insertions)}  ` +
+          `${chalk.red("-" + stats.deletions)}` +
+          chalk.dim(")"),
+      ),
+    );
+  }
+
+  static renderNothingToCommit(): void {
+    console.log(chalk.gray("\n  Nothing to commit\n"));
+  }
+
+  static renderCopied(label = "Copied to clipboard"): void {
+    console.log(chalk.gray(`\n✔ ${label}\n`));
+  }
+
+  static renderCancelled(): void {
+    console.log(chalk.gray("\nCancelled\n"));
   }
 
   static async actionMenu(config: AppConfig): Promise<UiAction> {
@@ -67,11 +113,21 @@ export class UI {
     return text.trim();
   }
 
-  static async selectBranch(branches: string[], message: string): Promise<string> {
-    return select({
+  static async selectBranch(
+    branches: string[],
+    message: string,
+  ): Promise<string> {
+    return select<string>({
       message,
-      choices: branches,
+      choices: branches.map((branch) => ({
+        name: branch,
+        value: branch,
+      })),
     });
+  }
+
+  static renderInfo(message: string): void {
+    console.log(chalk.gray(`\n✔ ${message}\n`));
   }
 
   static showHelp(): never {
