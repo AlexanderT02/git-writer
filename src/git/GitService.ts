@@ -224,7 +224,7 @@ export class GitService {
       .slice(0, this.config.git.maxChangedSymbols)
       .join("\n");
   }
-  
+
   fetchRemoteBranches(): void {
     this.runGitOrEmpty(["fetch", "--all", "--prune"], {
       maxBuffer: this.config.git.maxBufferBytes,
@@ -288,6 +288,43 @@ export class GitService {
         summary.insertions > 0 ||
         summary.deletions > 0,
       );
+  }
+
+  hasGitHubCli(): boolean {
+    const result = spawnSync("gh", ["--version"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    return result.status === 0;
+  }
+
+  createPullRequestViaGithubCli(baseBranch: string, title: string, body: string): string {
+    const normalizedBaseBranch = baseBranch.replace(/^origin\//, "");
+
+    const result = spawnSync(
+      "gh",
+      [
+        "pr",
+        "create",
+        "--base",
+        normalizedBaseBranch,
+        "--title",
+        title,
+        "--body",
+        body,
+      ],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    if (result.status !== 0) {
+      throw new Error(result.stderr || "Failed to create pull request via GitHub CLI");
+    }
+
+    return result.stdout.trim();
   }
 
   // Mutations
