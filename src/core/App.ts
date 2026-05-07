@@ -18,6 +18,7 @@ import {
   estimatePRTokens,
 } from "../llm/generationEstimate.js";
 import { GracefulExit, UserCancelledError } from "../errors.js";
+import { UsageTracker } from "../stats/UsageTracker.js";
 
 export class App {
   private readonly git: GitService;
@@ -30,6 +31,7 @@ export class App {
   private readonly fastMode: boolean;
   private readonly gitPR: GitPRService;
   private readonly githubCli: GitHubCLIService;
+  private readonly tracker: UsageTracker;
 
   constructor(fastMode = false) {
     this.fastMode = fastMode;
@@ -42,6 +44,7 @@ export class App {
     this.issueRefs = this.parseIssueRefs();
     this.gitPR = new GitPRService(this.git, config);
     this.githubCli = new GitHubCLIService(this.git);
+    this.tracker = new UsageTracker();
   }
 
   parseIssueRefs(): string[] | null {
@@ -78,7 +81,9 @@ export class App {
         const action = await UI.actionMenu(config);
 
         if (action === "commit") {
-          this.commit(message);
+          const fileCount = files.split("\n").filter(Boolean).length;
+          const estimatedTokens = estimateCommitTokens(this.commitGenerator, files, ctx);
+          this.commit(message, fileCount, estimatedTokens);
         }
 
         if (action === "regen") {
@@ -135,7 +140,8 @@ export class App {
 
     const message = await this.commitGenerator.generate(files, ctx);
 
-    this.commit(message);
+    const fileCount = files.split("\n").filter(Boolean).length;
+    this.commit(message, fileCount, estimatedTokens);
   }
 
   private assertFastModeFileLimit(files: string): void {
@@ -165,10 +171,21 @@ export class App {
     throw new GracefulExit(1);
   }
 
-  private commit(message: string): never {
+  private commit(message: string, fileCount: number = 0, estimatedTokens: number = 0): never {
     const finalMessage = this.appendIssueRefs(message);
 
     this.git.createCommit(finalMessage);
+
+    this.tracker.record({
+      command: "commit",
+      provider: config.llm.provider,
+      reasoningModel: config.llm.reasoningModel,
+      generationModel: config.llm.generationModel,
+      estimatedTokens,
+      fileCount,
+      branch: this.git.getCurrentBranch(),
+    });
+
     UI.renderCommitCreated(this.git.getLastCommitStats());
     throw new GracefulExit(0);
   }
@@ -245,6 +262,18 @@ export class App {
     this.renderLargePRTokenEstimate(prGenerator, prContext);
 
     const { title, description } = await prGenerator.generate(prContext);
+
+    const prTokenEstimate = estimatePRTokens(prGenerator, prContext);
+    const prFileCount = prContext.diff.split("\n").filter((l: string) => l.startsWith("diff --git")).length;
+    this.tracker.record({
+      command: "pr",
+      provider: config.llm.provider,
+      reasoningModel: config.llm.reasoningModel,
+      generationModel: config.llm.generationModel,
+      estimatedTokens: prTokenEstimate,
+      fileCount: prFileCount,
+      branch: this.git.getCurrentBranch(),
+    });
 
     while (true) {
       UI.renderPRPreview(selectedBaseBranch, title, description);
