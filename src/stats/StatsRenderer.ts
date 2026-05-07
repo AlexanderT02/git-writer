@@ -2,6 +2,7 @@ import chalk from "chalk";
 import { UsageTracker } from "./UsageTracker.js";
 import type { UsageEntry } from "../types/types.js";
 import { GracefulExit } from "../errors.js";
+import { CostEstimator } from "./CostEstimator.js";
 
 type AggregateStats = {
   count: number;
@@ -17,6 +18,7 @@ type AggregateStats = {
   durationMs: number;
   successes: number;
   failures: number;
+  costUsd: number;
 };
 
 type ModelStats = {
@@ -26,6 +28,7 @@ type ModelStats = {
   outputTokens: number;
   reasoningTokens: number;
   cachedTokens: number;
+  costUsd: number;
   successes: number;
   failures: number;
   roles: Map<string, number>;
@@ -33,9 +36,11 @@ type ModelStats = {
 
 export class StatsRenderer {
   private readonly tracker: UsageTracker;
+  private readonly cost: CostEstimator;
 
   constructor() {
     this.tracker = new UsageTracker();
+    this.cost = new CostEstimator();
   }
 
   render(period?: string): never {
@@ -100,21 +105,18 @@ export class StatsRenderer {
   private renderSummary(entries: UsageEntry[]): void {
     const stats = this.aggregate(entries);
 
-    const avgTokens = this.average(stats.tokens, stats.count);
-    const avgDurationMs = this.average(stats.durationMs, stats.count);
-    const successRate = this.percent(stats.successes, stats.count);
-
     console.log("");
     console.log(chalk.bold("  Summary"));
     console.log(
       `  ${chalk.cyan(this.formatNumber(stats.count))} runs  ` +
         `${chalk.yellow(this.formatNumber(stats.tokens))} tokens  ` +
-        `${chalk.dim(this.formatNumber(avgTokens))} avg/run`,
+        `${chalk.green(this.formatUsd(stats.costUsd))}  ` +
+        `${chalk.dim(this.formatNumber(this.average(stats.tokens, stats.count)))} avg/run`,
     );
     console.log(
-      `  ${chalk.green(`${successRate}% success`)}  ` +
-        `${stats.failures ? chalk.red(`${stats.failures} failed`) : chalk.dim("0 failed")}  ` +
-        `${chalk.dim(this.formatDuration(avgDurationMs))} avg duration`,
+      `  ${chalk.green(`${this.percent(stats.successes, stats.count)}% success`)}  ` +
+        `${stats.failures ? chalk.red(`${this.formatNumber(stats.failures)} failed`) : chalk.dim("0 failed")}  ` +
+        `${chalk.dim(this.formatDuration(this.average(stats.durationMs, stats.count)))} avg duration`,
     );
   }
 
@@ -129,7 +131,9 @@ export class StatsRenderer {
     ];
 
     if (stats.reasoningTokens > 0) {
-      parts.push(`${chalk.dim(this.formatNumber(stats.reasoningTokens))} internal reasoning`);
+      parts.push(
+        `${chalk.dim(this.formatNumber(stats.reasoningTokens))} internal reasoning`,
+      );
     }
 
     if (stats.cachedTokens > 0) {
@@ -164,37 +168,44 @@ export class StatsRenderer {
     console.log(chalk.bold("  Models"));
 
     for (const [model, stats] of rows) {
-      const avgTokens = this.average(stats.tokens, stats.calls);
-      const roles = this.formatRoles(stats.roles);
-
-      console.log(
-        `  ${chalk.cyan(model)}  ` +
-          chalk.dim(
-            `${this.formatNumber(stats.calls)} calls  ` +
-              `${this.formatNumber(stats.tokens)} tokens  ` +
-              `${this.formatNumber(avgTokens)} avg/call`,
-          ),
-      );
-
-      const details = [
-        `${this.formatNumber(stats.inputTokens)} input`,
-        `${this.formatNumber(stats.outputTokens)} output`,
-      ];
-
-      if (stats.reasoningTokens > 0) {
-        details.push(`${this.formatNumber(stats.reasoningTokens)} internal reasoning`);
-      }
-
-      if (stats.cachedTokens > 0) {
-        details.push(`${this.formatNumber(stats.cachedTokens)} cached`);
-      }
-
-      if (roles) {
-        details.push(roles);
-      }
-
-      console.log(chalk.dim(`    ${details.join("  ")}`));
+      this.renderModelRow(model, stats);
     }
+  }
+
+  private renderModelRow(model: string, stats: ModelStats): void {
+    const avgTokens = this.average(stats.tokens, stats.calls);
+    const roles = this.formatRoles(stats.roles);
+
+    console.log(
+      `  ${chalk.cyan(model)}  ` +
+        chalk.dim(
+          `${this.formatNumber(stats.calls)} calls  ` +
+            `${this.formatNumber(stats.tokens)} tokens  ` +
+            `${this.formatUsd(stats.costUsd)}  ` +
+            `${this.formatNumber(avgTokens)} avg/call`,
+        ),
+    );
+
+    const details = [
+      `${this.formatNumber(stats.inputTokens)} input`,
+      `${this.formatNumber(stats.outputTokens)} output`,
+    ];
+
+    if (stats.reasoningTokens > 0) {
+      details.push(
+        `${this.formatNumber(stats.reasoningTokens)} internal reasoning`,
+      );
+    }
+
+    if (stats.cachedTokens > 0) {
+      details.push(`${this.formatNumber(stats.cachedTokens)} cached`);
+    }
+
+    if (roles) {
+      details.push(roles);
+    }
+
+    console.log(chalk.dim(`    ${details.join("  ")}`));
   }
 
   private renderCommands(entries: UsageEntry[]): void {
@@ -218,6 +229,7 @@ export class StatsRenderer {
         `  ${this.pad(command, 8, this.colorCommand(command))}  ` +
           `${chalk.cyan(this.formatNumber(stats.count))} runs  ` +
           `${chalk.yellow(this.formatNumber(stats.tokens))} tokens  ` +
+          `${chalk.green(this.formatUsd(stats.costUsd))}  ` +
           `${chalk.dim(this.formatNumber(this.average(stats.tokens, stats.count)))} avg/run  ` +
           `${chalk.dim(this.formatDuration(this.average(stats.durationMs, stats.count)))} avg`,
       );
@@ -247,7 +259,8 @@ export class StatsRenderer {
         `  ${chalk.dim(day)}  ${this.bar(stats.tokens, maxTokens)} ` +
           chalk.dim(
             `${this.formatNumber(stats.count)} runs  ` +
-              `${this.formatNumber(stats.tokens)} tok`,
+              `${this.formatNumber(stats.tokens)} tok  ` +
+              `${this.formatUsd(stats.costUsd)}`,
           ),
       );
     }
@@ -260,13 +273,10 @@ export class StatsRenderer {
 
     console.log("");
     console.log(chalk.bold("  Context"));
-
-    const parts = [
-      `${this.formatNumber(stats.files)} files`,
-      `${this.formatNumber(this.average(stats.files, stats.count))} avg/run`,
-    ];
-
-    console.log(`  ${chalk.dim(parts.join("  "))}`);
+    console.log(
+      `  ${chalk.dim(`${this.formatNumber(stats.files)} files`)}  ` +
+        `${chalk.dim(`${this.formatNumber(this.average(stats.files, stats.count))} avg/run`)}`,
+    );
 
     if (stats.changedLines > 0) {
       console.log(
@@ -295,7 +305,9 @@ export class StatsRenderer {
     console.log("");
     console.log(chalk.bold("  Errors"));
 
-    for (const [code, count] of [...byError.entries()].sort(([, a], [, b]) => b - a)) {
+    for (const [code, count] of [...byError.entries()].sort(
+      ([, a], [, b]) => b - a,
+    )) {
       console.log(
         `  ${chalk.red(code)}  ${chalk.dim(`${this.formatNumber(count)} occurrences`)}`,
       );
@@ -304,22 +316,7 @@ export class StatsRenderer {
 
   private aggregate(entries: UsageEntry[]): AggregateStats {
     return entries.reduce<AggregateStats>(
-      (stats, entry) => ({
-        count: stats.count + 1,
-        tokens: stats.tokens + this.getTokens(entry),
-        inputTokens: stats.inputTokens + this.getInputTokens(entry),
-        outputTokens: stats.outputTokens + this.getOutputTokens(entry),
-        reasoningTokens:
-          stats.reasoningTokens + this.getReasoningTokens(entry),
-        cachedTokens: stats.cachedTokens + this.getCachedTokens(entry),
-        files: stats.files + (entry.fileCount ?? 0),
-        changedLines: stats.changedLines + (entry.changedLines ?? 0),
-        additions: stats.additions + (entry.additions ?? 0),
-        deletions: stats.deletions + (entry.deletions ?? 0),
-        durationMs: stats.durationMs + (entry.durationMs ?? 0),
-        successes: stats.successes + (entry.success === false ? 0 : 1),
-        failures: stats.failures + (entry.success === false ? 1 : 0),
-      }),
+      (stats, entry) => this.aggregateOne(stats, entry),
       this.emptyAggregate(),
     );
   }
@@ -329,13 +326,12 @@ export class StatsRenderer {
     key: string,
     entry: UsageEntry,
   ): void {
-    const existing = map.get(key) ?? this.emptyAggregate();
-    const next = this.aggregateOne(existing, entry);
-
-    map.set(key, next);
+    map.set(key, this.aggregateOne(map.get(key) ?? this.emptyAggregate(), entry));
   }
 
   private aggregateOne(stats: AggregateStats, entry: UsageEntry): AggregateStats {
+    const cost = this.cost.estimateEntry(entry);
+
     return {
       count: stats.count + 1,
       tokens: stats.tokens + this.getTokens(entry),
@@ -350,6 +346,7 @@ export class StatsRenderer {
       durationMs: stats.durationMs + (entry.durationMs ?? 0),
       successes: stats.successes + (entry.success === false ? 0 : 1),
       failures: stats.failures + (entry.success === false ? 1 : 0),
+      costUsd: stats.costUsd + cost.totalUsd,
     };
   }
 
@@ -365,6 +362,7 @@ export class StatsRenderer {
       outputTokens: 0,
       reasoningTokens: 0,
       cachedTokens: 0,
+      costUsd: 0,
       successes: 0,
       failures: 0,
       roles: new Map<string, number>(),
@@ -376,6 +374,7 @@ export class StatsRenderer {
     existing.outputTokens += call.tokens.outputTokens;
     existing.reasoningTokens += call.tokens.reasoningTokens ?? 0;
     existing.cachedTokens += call.tokens.cachedTokens ?? 0;
+    existing.costUsd += this.cost.estimateCall(call).totalUsd;
     existing.successes += call.success === false ? 0 : 1;
     existing.failures += call.success === false ? 1 : 0;
     existing.roles.set(call.role, (existing.roles.get(call.role) ?? 0) + 1);
@@ -398,6 +397,7 @@ export class StatsRenderer {
       durationMs: 0,
       successes: 0,
       failures: 0,
+      costUsd: 0,
     };
   }
 
@@ -473,6 +473,13 @@ export class StatsRenderer {
 
   private formatNumber(value: number): string {
     return Math.round(value).toLocaleString();
+  }
+
+  private formatUsd(value: number): string {
+    if (!Number.isFinite(value) || value <= 0) return "$0.0000";
+    if (value < 0.01) return `$${value.toFixed(4)}`;
+
+    return `$${value.toFixed(2)}`;
   }
 
   private formatDuration(ms: number): string {
