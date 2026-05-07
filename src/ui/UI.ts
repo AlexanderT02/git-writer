@@ -1,7 +1,11 @@
 import chalk from "chalk";
 import { editor, input, select, Separator } from "@inquirer/prompts";
 import type { AppConfig } from "../config/config.js";
-import type { CommitStats, UiAction } from "../types/types.js";
+import type {
+  BranchPRSummary,
+  CommitStats,
+  UiAction,
+} from "../types/types.js";
 
 export class UI {
   static render(msg: string, config: AppConfig): void {
@@ -114,14 +118,23 @@ export class UI {
   }
 
   static async selectBranch(
-    branches: string[],
+    branches: BranchPRSummary[],
     message: string,
   ): Promise<string> {
     return select<string>({
       message,
       choices: branches.map((branch) => ({
-        name: branch,
-        value: branch,
+        name:
+          `${branch.branch} ` +
+          chalk.dim(
+            `(${branch.commits} commit${branch.commits !== 1 ? "s" : ""}, ` +
+            `${branch.files} file${branch.files !== 1 ? "s" : ""}, ` +
+            chalk.green(`+${branch.insertions}`) +
+            " " +
+            chalk.red(`-${branch.deletions}`) +
+            ")",
+          ),
+        value: branch.branch,
       })),
     });
   }

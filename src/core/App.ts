@@ -128,10 +128,10 @@ export class App {
   async runPRInteractive(baseBranch?: string): Promise<void> {
     const selectedBaseBranch =
       baseBranch ??
-      await UI.selectBranch(
-        this.git.getAllBranches(),
-        "Select base branch for PR:",
-      );
+    await UI.selectBranch(
+      this.git.getBranchPRSummaries(),
+      "Select base branch for PR:",
+    );
 
     const prContext = this.buildPRContext(selectedBaseBranch);
     const prGenerator = new PRGenerator(this.ai, config);
@@ -143,9 +143,9 @@ export class App {
       const action = await UI.prActionMenu();
 
       if (action === "copy") {
-        await clipboard.write(`# ${title}\n\n${description}`);
+        await clipboard.write(`${title}\n\n${description}`);
         UI.renderCopied("Copied PR to clipboard");
-        continue;
+        process.exit(0);
       }
 
       if (action === "create") {
