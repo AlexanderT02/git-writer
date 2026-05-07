@@ -73,8 +73,8 @@ export const config: AppConfig = {
   // LLM backend and models used by the two-pass generation flow.
   llm: {
     provider: "openai",
-    reasoningModel: "gpt-5.4-mini",
-    generationModel: "gpt-4o-mini",
+    reasoningModel: "gpt-4o-mini",
+    generationModel: "gpt-5.4-mini",
   },
 
   // Git limits used while collecting repository metadata and diff context.
