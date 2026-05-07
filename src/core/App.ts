@@ -167,13 +167,72 @@ export class App {
     return this.context.buildPRContext(baseBranch);
   }
 
+  private renderPRFailure(result: {
+    message: string;
+    suggestedCommand?: string;
+  }): never {
+    console.log(`\n  ✖ ${result.message}`);
+
+    if (result.suggestedCommand) {
+      console.log(`  → ${result.suggestedCommand}`);
+    }
+
+    console.log("");
+    process.exit(1);
+  }
+
   async runPRInteractive(baseBranch?: string): Promise<void> {
+    const baseSummaries = this.gitPR.getAvailablePRBaseSummaries();
+
+    if (!baseBranch && !baseSummaries.length) {
+      console.log(
+        "\n  ✖ No remote base branches found. Run git fetch --all --prune or pass a base branch directly, e.g. gw p origin/main\n",
+      );
+      process.exit(1);
+    }
+
     const selectedBaseBranch =
       baseBranch ??
       (await UI.selectBranch(
-        this.gitPR.getAvailablePRBaseSummaries(),
+        baseSummaries,
         "Select base branch for PR:",
       ));
+
+    const preflightError = this.githubCli.getPreflightError(selectedBaseBranch);
+
+    if (preflightError) {
+      switch (preflightError.status) {
+        case "already_exists":
+          if (preflightError.url) {
+            UI.renderPRCreated(preflightError.url);
+          } else {
+            console.log("\n  ✔ Pull request already exists.\n");
+          }
+
+          process.exit(0);
+          return;
+
+        case "not_pushed":
+        case "unpushed_commits":
+        case "gh_unauthenticated":
+        case "gh_missing":
+        case "failed":
+          this.renderPRFailure(preflightError);
+          return;
+
+        case "created":
+          UI.renderPRCreated(preflightError.url);
+          process.exit(0);
+          return;
+      }
+    }
+
+    if (!this.gitPR.hasPRChangesAgainst(selectedBaseBranch)) {
+      console.log(
+        `\n  ✖ No PR changes found against ${selectedBaseBranch}.\n`,
+      );
+      process.exit(1);
+    }
 
     const prContext = this.buildPRContext(selectedBaseBranch);
     const prGenerator = new PRGenerator(this.ai, config);
@@ -197,14 +256,35 @@ export class App {
       }
 
       if (action === "create") {
-        const url = this.githubCli.createPullRequestFromCurrentBranch(
+        const result = this.githubCli.createPullRequestFromCurrentBranch(
           selectedBaseBranch,
           title,
           description,
         );
 
-        UI.renderPRCreated(url);
-        process.exit(0);
+        switch (result.status) {
+          case "created":
+            UI.renderPRCreated(result.url);
+            process.exit(0);
+            return;
+
+          case "already_exists":
+            if (result.url) {
+              UI.renderPRCreated(result.url);
+            } else {
+              console.log("\n  ✔ Pull request already exists.\n");
+            }
+
+            process.exit(0);
+            return;
+
+          case "not_pushed":
+          case "unpushed_commits":
+          case "gh_unauthenticated":
+          case "gh_missing":
+          case "failed":
+            this.renderPRFailure(result);
+        }
       }
 
       UI.renderCancelled();

@@ -66,3 +66,37 @@ export type BranchPRSummary = {
   insertions: number;
   deletions: number;
 };
+
+export type PullRequestCreateResult =
+  | {
+    status: "created";
+    url: string;
+  }
+  | {
+    status: "already_exists";
+    url: string | null;
+    message: string;
+  }
+  | {
+    status: "not_pushed";
+    message: string;
+    suggestedCommand: string;
+  }
+  | {
+    status: "unpushed_commits";
+    message: string;
+    suggestedCommand: string;
+  }
+  | {
+    status: "gh_missing";
+    message: string;
+  }
+  | {
+    status: "gh_unauthenticated";
+    message: string;
+    suggestedCommand: string;
+  }
+  | {
+    status: "failed";
+    message: string;
+  };

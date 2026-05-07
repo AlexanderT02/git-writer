@@ -8,20 +8,12 @@ export class GitPRService {
     private readonly config: AppConfig,
   ) {}
 
-  /**
-   * Updates remote refs before calculating PR stats.
-   * This keeps branch comparisons based on the latest remote state.
-   */
   refreshRemoteBranches(): void {
     this.git.runGitOrEmpty(["fetch", "--all", "--prune"], {
       maxBuffer: this.config.git.maxBufferBytes,
     });
   }
 
-  /**
-   * Returns remote branch names that can be used as PR base branches.
-   * Example: origin/main, origin/develop
-   */
   getRemoteBranchNames(): string[] {
     const raw = this.git.runGitOrEmpty([
       "branch",
@@ -37,12 +29,6 @@ export class GitPRService {
       .filter((branch, index, all) => all.indexOf(branch) === index);
   }
 
-  /**
-   * Builds a short PR summary for the current branch against one base branch.
-   *
-   * Uses the three-dot range because that matches how PR diffs are usually reviewed:
-   * compare the current branch against the merge-base with the selected base branch.
-   */
   getPRSummaryForBaseBranch(baseBranch: string): BranchPRSummary {
     const commitsRaw = this.git.runGitOrEmpty([
       "log",
@@ -72,16 +58,47 @@ export class GitPRService {
     };
   }
 
-  /**
-   * Returns only base branches that would produce a non-empty PR.
-   * Remote branches are refreshed once before summaries are calculated.
-   */
   getAvailablePRBaseSummaries(): BranchPRSummary[] {
     this.refreshRemoteBranches();
 
-    return this.getRemoteBranchNames()
-      .map((branch) => this.getPRSummaryForBaseBranch(branch))
-      .filter((summary) => this.hasChanges(summary));
+    const summaries = this.getRemoteBranchNames().map((branch) =>
+      this.getPRSummaryForBaseBranch(branch),
+    );
+
+    const changedSummaries = summaries.filter((summary) =>
+      this.hasChanges(summary),
+    );
+
+    return this.sortBaseBranches(
+      changedSummaries.length ? changedSummaries : summaries,
+    );
+  }
+
+  getChangedPRBaseSummaries(): BranchPRSummary[] {
+    this.refreshRemoteBranches();
+
+    return this.sortBaseBranches(
+      this.getRemoteBranchNames()
+        .map((branch) => this.getPRSummaryForBaseBranch(branch))
+        .filter((summary) => this.hasChanges(summary)),
+    );
+  }
+
+  hasPRChangesAgainst(baseBranch: string): boolean {
+    return this.hasChanges(this.getPRSummaryForBaseBranch(baseBranch));
+  }
+
+  private sortBaseBranches(summaries: BranchPRSummary[]): BranchPRSummary[] {
+    return [...summaries].sort((a, b) => {
+      const rank = (branch: string): number => {
+        if (branch === "origin/main") return 0;
+        if (branch === "origin/master") return 1;
+        if (branch === "origin/develop") return 2;
+        return 10;
+      };
+
+      return rank(a.branch) - rank(b.branch);
+    });
   }
 
   private countLines(value: string): number {
