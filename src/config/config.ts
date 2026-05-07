@@ -24,6 +24,8 @@ export interface AppConfig {
   };
 
   context: {
+    fastModeFileLimit: number;
+    fastModeTokenLimit: number;
     tokenBudget: number;
     smallFileThreshold: number;
     contextLines: number;
@@ -95,6 +97,8 @@ export const config: AppConfig = {
     smallFileThreshold: 3_000,
     contextLines: 30,
     maxFileBufferBytes: 10 * 1024 * 1024,
+    fastModeTokenLimit: 80_000,
+    fastModeFileLimit: 50,
   },
 
   // Interactive staging prompt behavior.

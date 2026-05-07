@@ -70,14 +70,6 @@ export class App {
       const files = this.git.getStagedFileNames();
       const ctx = this.commitContext.build(files);
 
-      let estimatedTokens = estimateCommitTokens(
-        this.commitGenerator,
-        files,
-        ctx,
-      );
-
-      UI.renderTokenEstimate(estimatedTokens);
-
       let message = await this.commitGenerator.generate(files, ctx);
 
       while (true) {
@@ -91,15 +83,6 @@ export class App {
 
         if (action === "regen") {
           this.commitGenerator.extraInstruction = "";
-
-          estimatedTokens = estimateCommitTokens(
-            this.commitGenerator,
-            files,
-            ctx,
-          );
-
-          UI.renderTokenEstimate(estimatedTokens);
-
           message = await this.commitGenerator.generate(files, ctx);
           continue;
         }
@@ -107,15 +90,6 @@ export class App {
         if (action === "refine") {
           const text = await UI.refineInput(config);
           this.commitGenerator.extraInstruction = text;
-
-          estimatedTokens = estimateCommitTokens(
-            this.commitGenerator,
-            files,
-            ctx,
-          );
-
-          UI.renderTokenEstimate(estimatedTokens);
-
           message = await this.commitGenerator.generate(files, ctx);
           continue;
         }
@@ -147,15 +121,48 @@ export class App {
       throw new GracefulExit(0);
     }
 
+    this.assertFastModeFileLimit(files);
+
     const ctx = this.commitContext.build(files);
 
-    UI.renderTokenEstimate(
-      estimateCommitTokens(this.commitGenerator, files, ctx),
+    const estimatedTokens = estimateCommitTokens(
+      this.commitGenerator,
+      files,
+      ctx,
     );
+
+    this.assertFastModeTokenLimit(estimatedTokens);
 
     const message = await this.commitGenerator.generate(files, ctx);
 
     this.commit(message);
+  }
+
+  private assertFastModeFileLimit(files: string): void {
+    const fileCount = files.split("\n").filter(Boolean).length;
+    const limit = config.context.fastModeFileLimit;
+
+    if (fileCount <= limit) return;
+
+    console.log(
+      `\n  ✖ Fast mode aborted: ${fileCount} staged files exceed the limit of ${limit}.\n`,
+    );
+    console.log("  → Use interactive mode to stage fewer files.\n");
+
+    throw new GracefulExit(1);
+  }
+
+  private assertFastModeTokenLimit(estimatedTokens: number): void {
+    const limit = config.context.fastModeTokenLimit;
+
+    if (estimatedTokens <= limit) return;
+
+    console.log(
+      `\n  ✖ Fast mode aborted: estimated ${estimatedTokens} tokens exceed the limit of ${limit}.\n`,
+    );
+    console.log("  → Use interactive mode or stage fewer/lighter changes.\n");
+
+    throw new GracefulExit(1);
   }
 
   private commit(message: string): never {
@@ -196,10 +203,7 @@ export class App {
 
     const selectedBaseBranch =
       baseBranch ??
-      (await UI.selectBranch(
-        baseSummaries,
-        "Select base branch for PR:",
-      ));
+      (await UI.selectBranch(baseSummaries, "Select base branch for PR:"));
 
     const preflightError = this.githubCli.getPreflightError(selectedBaseBranch);
 
@@ -238,10 +242,7 @@ export class App {
     const prContext = this.buildPRContext(selectedBaseBranch);
     const prGenerator = new PRGenerator(this.ai, config);
 
-    UI.renderTokenEstimate(
-      estimatePRTokens(prGenerator, prContext),
-      "PR tokens",
-    );
+    this.renderLargePRTokenEstimate(prGenerator, prContext);
 
     const { title, description } = await prGenerator.generate(prContext);
 
@@ -289,5 +290,17 @@ export class App {
       UI.renderCancelled();
       throw new UserCancelledError();
     }
+  }
+
+  private renderLargePRTokenEstimate(
+    prGenerator: PRGenerator,
+    prContext: PRContext,
+  ): void {
+    const estimatedTokens = estimatePRTokens(prGenerator, prContext);
+    const warningThreshold = config.context.fastModeTokenLimit * 3;
+
+    if (estimatedTokens <= warningThreshold) return;
+
+    UI.renderTokenEstimate(estimatedTokens, "Large PR token estimate");
   }
 }
