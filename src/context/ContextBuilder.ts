@@ -200,30 +200,73 @@ export class ContextBuilder {
 
     const commits = this.gitService.runGitOrEmpty([
       "log",
-      `${baseBranch}..HEAD`,
+      "--right-only",
+      "--cherry-pick",
       "--oneline",
       "--no-merges",
+      `${baseBranch}...HEAD`,
     ]);
 
-    const diff = this.gitService.runGitOrEmpty(["diff", `${baseBranch}..HEAD`]);
+    const diff = this.gitService.runGitOrEmpty([
+      "diff",
+      `${baseBranch}...HEAD`,
+    ]);
 
-    const stagedFiles = this.getStagedEntries();
-    const fileContexts = stagedFiles.map((entry) => {
-      const before = this.getFileContent("HEAD", entry.file, entry.status);
-      const after = this.getFileContent("INDEX", entry.file, entry.status);
+    const changedFiles = this.gitService.runGitOrEmpty([
+      "diff",
+      "--name-status",
+      `${baseBranch}...HEAD`,
+    ]);
 
-      if (entry.status === "D") return `=== ${entry.file} [deleted] ===\n--- DELETED FILE ---`;
-      if (before && after && before.length + after.length <= this.config.context.smallFileThreshold)
-        return `=== ${entry.file} [full] ===\n--- BEFORE ---\n${before}\n--- AFTER ---\n${after}`;
-      return this.gitService.getCachedFileDiff(entry.file);
-    });
+    const fileContexts = changedFiles
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => this.buildPRFileContext(baseBranch, line));
 
     return {
       branch: branchCtx.branch,
       issue: branchCtx.issue,
       commits,
       diff,
-      fileContexts: fileContexts.join("\n\n"),
+      fileContexts: fileContexts.filter(Boolean).join("\n\n"),
     };
+  }
+  private buildPRFileContext(baseBranch: string, line: string): string {
+    const parts = line.trim().split(/\s+/);
+    const status = parts[0]?.[0] ?? "";
+    const file = parts[parts.length - 1] ?? "";
+
+    if (!file) return "";
+
+    if (status === "D") {
+      return `=== ${file} (${status}) [deleted] ===\n--- DELETED FILE ---`;
+    }
+
+    const diff = this.gitService.runGitOrEmpty([
+      "diff",
+      `${baseBranch}...HEAD`,
+      "--",
+      file,
+    ]);
+
+    if (!diff) {
+      return `=== ${file} (${status}) [changed] ===\n[no diff]`;
+    }
+
+    const lines = diff.split("\n");
+
+    if (lines.length <= this.config.git.largeDiffLineLimit) {
+      return `=== ${file} (${status}) [diff] ===\n${diff}`;
+    }
+
+    const compactDiff = this.gitService.runGitOrEmpty([
+      "diff",
+      `${baseBranch}...HEAD`,
+      `-U${this.config.context.contextLines}`,
+      "--",
+      file,
+    ]);
+
+    return `=== ${file} (${status}) [diff +context] ===\n${compactDiff || diff}`;
   }
 }
