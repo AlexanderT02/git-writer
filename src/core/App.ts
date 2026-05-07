@@ -42,9 +42,9 @@ export class App {
     return `${message}\n\nrefs ${this.issueRefs.join(", ")}`;
   }
 
-  async run(): Promise<void> {
+  async runCommitInteractive(): Promise<void> {
     if (this.fastMode) {
-      return this.runFast();
+      return this.runCommitInteractiveFast();
     }
     while (true) {
       await this.staging.ensureStaged();
@@ -112,7 +112,7 @@ export class App {
     }
   }
 
-  private async runFast(): Promise<void> {
+  private async runCommitInteractiveFast(): Promise<void> {
     this.git.add(["."]);
 
     const files = this.git.getStagedFiles();

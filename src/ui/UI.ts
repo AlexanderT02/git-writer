@@ -73,4 +73,38 @@ export class UI {
       choices: branches,
     });
   }
+
+  static showHelp(): never {
+    const command = chalk.cyan;
+    const option = chalk.yellow;
+    const dim = chalk.dim;
+
+    console.log("");
+    console.log(chalk.bold.blue("Git Writer") + dim(" (gw)"));
+    console.log("");
+
+    console.log(chalk.bold("Usage"));
+    console.log(`  ${command("gw")} ${dim("<command>")} ${dim("[options]")}`);
+    console.log("");
+
+    console.log(chalk.bold("Commands"));
+    console.log(`  ${command("commit")}, ${command("c")}              ${dim("Generate a commit message")}`);
+    console.log(`  ${command("pr")}, ${command("p")}                  ${dim("Generate a PR title and body")}`);
+    console.log("");
+
+    console.log(chalk.bold("Options"));
+    console.log(`  ${option("-f")}, ${option("--fast")}             ${dim("Skip interactive prompts")}`);
+    console.log(`  ${option("-b")}, ${option("--base")} ${dim("<branch>")}   ${dim("Base branch for PR comparison")}`);
+    console.log(`  ${option("-h")}, ${option("--help")}             ${dim("Show this help message")}`);
+    console.log("");
+
+    console.log(chalk.bold("Examples"));
+    console.log(`  ${dim("$")} ${command("gw c")}`);
+    console.log(`  ${dim("$")} ${command("gw commit --fast")}`);
+    console.log(`  ${dim("$")} ${command("gw pr")}`);
+    console.log(`  ${dim("$")} ${command("gw p -b origin/develop")}`);
+    console.log("");
+
+    process.exit(0);
+  }
 }
