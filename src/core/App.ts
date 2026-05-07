@@ -16,7 +16,7 @@ import { GitHubCLIService } from "../git/GitHubCliService.js";
 import {
   estimateCommitTokens,
   estimatePRTokens,
-} from "../llm/generationEstimate.js";
+} from "../llm/estimate/generationEstimate.js";
 import { GracefulExit, UserCancelledError } from "../errors.js";
 import { UsageTracker } from "../stats/UsageTracker.js";
 
