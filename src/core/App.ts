@@ -9,7 +9,8 @@ import { createLLM } from "../llm/index.js";
 import { StagingService } from "../staging/StagingService.js";
 import { UI } from "../ui/UI.js";
 import type { LLM } from "../llm/LLM.js";
-
+import type { PRContext } from "../types/types.js";
+import { PRGenerator } from "../commit/PRGenerator.js";
 export class App {
   private readonly git: GitService;
   private readonly ai: LLM;
@@ -143,5 +144,48 @@ export class App {
     }
 
     process.exit(0);
+  }
+
+  buildPRContext(baseBranch: string = "origin/main"): PRContext {
+    return this.context.buildPRContext(baseBranch);
+  }
+
+  async runPRInteractive(baseBranch?: string): Promise<void> {
+    const selectedBaseBranch =
+      baseBranch ??
+      await UI.selectBranch(
+        this.git.getAllBranches(),
+        "Select base branch for PR:",
+      );
+
+    const prContext = this.buildPRContext(selectedBaseBranch);
+
+    const prGenerator = new PRGenerator(this.ai, config);
+    const { title, description } = await prGenerator.generate(prContext);
+
+    while (true) {
+      console.log(chalk.blue("=== Pull Request Preview ===\n"));
+      console.log(chalk.green("Base:"), selectedBaseBranch);
+      console.log(chalk.green("Title:"), title);
+      console.log(chalk.green("Description:\n"), description);
+
+      const action = await UI.prActionMenu();
+
+      if (action === "copy") {
+        await clipboard.write(`# ${title}\n\n${description}`);
+        console.log(chalk.gray("\n✔ Copied PR to clipboard\n"));
+        continue;
+      }
+
+      if (action === "create") {
+        console.log(chalk.gray("\n✔ PR would be created via GitHub CLI here\n"));
+        process.exit(0);
+      }
+
+      if (action === "cancel") {
+        console.log(chalk.gray("\nCancelled\n"));
+        process.exit(0);
+      }
+    }
   }
 }
