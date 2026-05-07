@@ -4,10 +4,11 @@ import chalk from "chalk";
 import { App } from "./core/App.js";
 import { UI } from "./ui/UI.js";
 import { GracefulExit } from "./errors.js";
+import { StatsRenderer } from "./stats/StatsRenderer.js";
 
 const args = process.argv.slice(2);
 
-const KNOWN_FLAGS = new Set(["-h", "--help", "-f", "--fast", "-b", "--base"]);
+const KNOWN_FLAGS = new Set(["-h", "--help", "-f", "--fast", "-b", "--base", "--reset"]);
 
 const hasFlag = (...flags: string[]): boolean =>
   args.some((arg) => flags.includes(arg));
@@ -29,7 +30,7 @@ const getOptionValue = (...names: string[]): string | undefined => {
   return value;
 };
 
-const normalizeCommand = (command?: string): "commit" | "pr" | "help" => {
+const normalizeCommand = (command?: string): "commit" | "pr" | "stats" | "help" => {
   switch (command) {
     case "commit":
     case "c":
@@ -39,6 +40,10 @@ const normalizeCommand = (command?: string): "commit" | "pr" | "help" => {
     case "p":
     case "pull-request":
       return "pr";
+
+    case "stats":
+    case "s":
+      return "stats";
 
     default:
       return "help";
@@ -113,6 +118,18 @@ async function main(): Promise<void> {
   assertInsideGitRepo();
 
   const app = new App(hasFlag("-f", "--fast"));
+
+  if (command === "stats") {
+    const renderer = new StatsRenderer();
+
+    if (hasFlag("--reset")) {
+      renderer.renderReset();
+    }
+
+    const period = args.find((a) => !a.startsWith("-") && a !== "stats" && a !== "s");
+    renderer.render(period);
+    return;
+  }
 
   if (command === "commit") {
     await app.runCommitInteractive();
