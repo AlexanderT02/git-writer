@@ -66,8 +66,8 @@ export interface AppConfig {
 
 export const config: AppConfig = {
   app: {
-    name: "git-commit-writer",
-    command: "gcw", // Must match the package.json bin command.
+    name: "git-writer",
+    command: "gw", // Must match the package.json bin command.
   },
 
   // LLM backend and models used by the two-pass generation flow.

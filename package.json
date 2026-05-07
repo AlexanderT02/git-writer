@@ -1,8 +1,8 @@
 {
-  "name": "git-commit-writer",
+  "name": "git-writer",
   "version": "1.0.0",
   "bin": {
-    "gcw": "dist/index.js"
+    "gw": "dist/index.js"
   },
   "type": "module",
   "dependencies": {

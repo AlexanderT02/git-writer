@@ -3,73 +3,91 @@ import chalk from "chalk";
 import { App } from "./core/App.js";
 
 const args = process.argv.slice(2);
-const fastMode = args.includes("-f") || args.includes("--fast");
 
-const command = args[0];
+const hasFlag = (...flags: string[]): boolean =>
+  args.some((arg) => flags.includes(arg));
 
-function getOptionValue(name: string): string | null {
-  const index = args.findIndex((arg) => arg === name);
+const getOptionValue = (...names: string[]): string | undefined => {
+  const index = args.findIndex((arg) => names.includes(arg));
+  const value = index >= 0 ? args[index + 1] : undefined;
 
-  if (index === -1) return null;
+  return value && !value.startsWith("-") ? value : undefined;
+};
 
-  const value = args[index + 1];
+const showHelp = (): never => {
+  const command = chalk.cyan;
+  const option = chalk.yellow;
+  const dim = chalk.dim;
 
-  if (!value || value.startsWith("-")) {
-    return null;
+  console.log("");
+  console.log(chalk.bold.blue("Git Writer") + dim(" (gw)"));
+  console.log("");
+
+  console.log(chalk.bold("Usage"));
+  console.log(`  ${command("gw")} ${dim("<command>")} ${dim("[options]")}`);
+  console.log("");
+
+  console.log(chalk.bold("Commands"));
+  console.log(`  ${command("commit")}, ${command("c")}              ${dim("Generate a commit message")}`);
+  console.log(`  ${command("pr")}, ${command("p")}                  ${dim("Generate a PR title and body")}`);
+  console.log("");
+
+  console.log(chalk.bold("Options"));
+  console.log(`  ${option("-f")}, ${option("--fast")}             ${dim("Skip interactive prompts")}`);
+  console.log(`  ${option("-b")}, ${option("--base")} ${dim("<branch>")}   ${dim("Base branch for PR comparison")}`);
+  console.log(`  ${option("-h")}, ${option("--help")}             ${dim("Show this help message")}`);
+  console.log("");
+
+  console.log(chalk.bold("Examples"));
+  console.log(`  ${dim("$")} ${command("gw c")}`);
+  console.log(`  ${dim("$")} ${command("gw commit --fast")}`);
+  console.log(`  ${dim("$")} ${command("gw pr")}`);
+  console.log(`  ${dim("$")} ${command("gw p -b origin/develop")}`);
+  console.log("");
+
+  process.exit(0);
+};
+
+const normalizeCommand = (command?: string): "commit" | "pr" | "help" => {
+  switch (command) {
+    case "commit":
+    case "c":
+      return "commit";
+
+    case "pr":
+    case "p":
+    case "pull-request":
+      return "pr";
+
+    default:
+      return "help";
+  }
+};
+
+async function main(): Promise<void> {
+  if (hasFlag("-h", "--help")) {
+    showHelp();
   }
 
-  return value;
-}
+  const command = normalizeCommand(args[0]);
+  const app = new App(hasFlag("-f", "--fast"));
 
-function showHelp() {
-  console.log(chalk.blue("\nGit Commit Writer (gcw) CLI\n"));
-  console.log("Usage:");
-  console.log("  gcw <command> [options]\n");
-  console.log("Commands:");
-  console.log("  commit           Generate a commit message for staged changes");
-  console.log("  pr               Generate a PR title and description for the current branch\n");
-  console.log("Options:");
-  console.log("  -f, --fast       Skip prompts and generate automatically");
-  console.log("  --base <branch>  Base branch for PR comparison");
-  console.log("  -h, --help       Show this help message\n");
-  console.log("Examples:");
-  console.log("  gcw commit");
-  console.log("  gcw pr");
-  console.log("  gcw pr --base origin/main");
-  console.log("  gcw pr --base develop");
-  console.log("  gcw pr -f\n");
-  process.exit(0);
-}
+  if (command === "commit") {
+    await app.run();
+    return;
+  }
 
-if (args.includes("--help") || args.includes("-h")) {
+  if (command === "pr") {
+    await app.runPRInteractive(getOptionValue("-b", "--base"));
+    return;
+  }
+
+  console.log(chalk.yellow("\n⚠ No valid command provided."));
   showHelp();
 }
 
-(async () => {
-  try {
-    const app = new App(fastMode);
-
-    switch (command) {
-      case "commit": {
-        await app.run();
-        break;
-      }
-
-      case "pr": {
-        const baseBranch = getOptionValue("--base");
-
-        await app.runPRInteractive(baseBranch ?? undefined);
-        break;
-      }
-
-      default: {
-        console.log(chalk.yellow("\n⚠ No valid command provided."));
-        showHelp();
-      }
-    }
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(chalk.red(`\n✖ ${message}\n`));
-    process.exit(1);
-  }
-})();
+main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(chalk.red(`\n✖ ${message}\n`));
+  process.exit(1);
+});
