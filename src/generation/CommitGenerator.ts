@@ -173,67 +173,188 @@ ${sections}`;
       .filter(Boolean)
       .join("\n\n");
 
-    return `Write one Conventional Commit message using the analysis and staged context.
+    return `You are now in COMMIT MESSAGE MODE.
 
-Analysis:
-${reasoning || "NONE"}
+      Write exactly one raw Git commit message using the analysis and staged context.
 
-Output exactly one commit message in this format:
+      The output must be plain commit-message text only.
+      Do not output JSON.
+      Do not output an array.
+      Do not output an object.
+      Do not wrap the message in quotes.
+      Do not add explanations before or after the commit message.
 
-<type>(<scope>): <summary>
+      Analysis:
+      ${reasoning || "NONE"}
 
-- <bullet>
-- <bullet>
+      Output exactly one commit message in this format:
 
-Optional footer:
-BREAKING CHANGE: <description>
+      <type>(<scope>): <summary>
 
-Rules:
-- Use the TYPE and SCOPE from the analysis unless clearly contradicted by staged context
-- Omit "(<scope>)" when SCOPE is NONE
-- Summary must be <= ${this.config.commit.summaryMaxLength} characters
-- Summary must use imperative mood
-- Summary must not end with a period
-- Summary must describe the dominant change, not every detail
-- Body should contain exactly ${this.config.commit.preferredBulletCount} bullets unless ${this.config.commit.maxBulletCount} are needed
-- Bullets must explain concrete changes visible in staged files
-- Bullets must not repeat the summary
-- Bullets must not mention file names unless the file name is important to understanding the change
-- Do not invent behavior, motivation, tests, migration steps, or performance claims
-- Do not use vague words: update, improve, change, misc, cleanup, various
-- Prefer precise verbs: add, remove, extract, rename, validate, wire, split, replace, handle, guard, derive
-- Plain text only
-- No markdown headings
-- No code fences
+      - <bullet>
+      - <bullet>
 
-Breaking change rules:
-- Include BREAKING CHANGE only if a public API, schema, CLI contract, config contract, database shape, or exported interface changed incompatibly
-- Do not include BREAKING CHANGE for internal refactors, UI copy, formatting, or private helper changes
-${breakingHint}
+      Optional footer:
+      BREAKING CHANGE: <description>
 
-Bad summaries:
-- update files
-- improve staging
-- change logic
-- cleanup code
-- refactor stuff
+      Hard output rules:
+      - Output only the raw commit message
+      - The first character of the response must be a lowercase conventional commit type letter
+      - The first line must start with one of: feat, fix, refactor, perf, test, docs, chore, ci, build, revert
+      - The first line must match either "<type>: <summary>" or "<type>(<scope>): <summary>"
+      - Do not output JSON
+      - Do not output an array like ["feat: ..."]
+      - Do not output an object like {"message":"feat: ..."}
+      - Do not wrap the commit message in quotes
+      - Do not use markdown fences
+      - Do not add any text before or after the commit message
 
-Good summaries:
-- add tree-based staged file selection
-- guard commit context against empty diffs
-- split prompt generation into intent and message passes
-- handle renamed staged files in context builder
+      Commit rules:
+      - Use the TYPE and SCOPE from the analysis unless clearly contradicted by staged context
+      - Omit "(<scope>)" when SCOPE is NONE
+      - Summary must be <= ${this.config.commit.summaryMaxLength} characters
+      - Summary must use imperative mood
+      - Summary must not end with a period
+      - Summary must describe the dominant change, not every detail
+      - Body should contain exactly ${this.config.commit.preferredBulletCount} bullets unless ${this.config.commit.maxBulletCount} are needed
+      - Bullets must explain concrete changes visible in staged files
+      - Bullets must not repeat the summary
+      - Bullets must not mention file names unless the file name is important to understanding the change
+      - Do not invent behavior, motivation, tests, migration steps, or performance claims
+      - Do not use vague words: update, improve, change, misc, cleanup, various
+      - Prefer precise verbs: add, remove, extract, rename, validate, wire, split, replace, handle, guard, derive
+      - Plain text only
+      - No markdown headings
+      - No code fences
 
-${sections}`;
+      Invalid outputs:
+      ["feat: add login"]
+      {"message":"feat: add login"}
+      \`\`\`text
+      feat: add login
+      \`\`\`
+
+      Valid outputs start directly with:
+      feat:
+      fix:
+      refactor:
+      perf:
+      test:
+      docs:
+      chore:
+      ci:
+      build:
+      revert:
+
+      Breaking change rules:
+      - Include BREAKING CHANGE only if a public API, schema, CLI contract, config contract, database shape, or exported interface changed incompatibly
+      - Do not include BREAKING CHANGE for internal refactors, UI copy, formatting, or private helper changes
+      ${breakingHint}
+
+      Bad summaries:
+      - update files
+      - improve staging
+      - change logic
+      - cleanup code
+      - refactor stuff
+
+      Good summaries:
+      - add tree-based staged file selection
+      - guard commit context against empty diffs
+      - split prompt generation into intent and message passes
+      - handle renamed staged files in context builder
+
+      ${sections}`;
   }
 
   sanitizeCommitMessage(message: string): string {
-    return (message || "")
-      .replace(/```[\s\S]*?\n/g, "")
-      .replace(/```/g, "")
+    const cleaned = (message || "")
+      .replace(/^```(?:text|txt|md|markdown|json)?\s*/i, "")
+      .replace(/\s*```$/i, "")
       .replace(/^plaintext\s*/i, "")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
+
+    const unwrapped = this.unwrapJsonCommitMessage(cleaned);
+
+    return unwrapped
+      .replace(/^["']|["']$/g, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  private unwrapJsonCommitMessage(message: string): string {
+    const candidates = [
+      message,
+      this.extractJsonArray(message),
+      this.extractJsonObject(message),
+    ].filter((value): value is string => Boolean(value));
+
+    for (const candidateText of candidates) {
+      try {
+        const parsed = JSON.parse(candidateText);
+
+        if (Array.isArray(parsed)) {
+          const textItems = parsed.filter(
+            (item): item is string => typeof item === "string",
+          );
+
+          if (textItems.length > 0) {
+            return textItems.join("\n\n").trim();
+          }
+        }
+
+        if (typeof parsed === "string") {
+          return parsed.trim();
+        }
+
+        if (parsed && typeof parsed === "object") {
+          const candidate = parsed as {
+            message?: unknown;
+            commitMessage?: unknown;
+            text?: unknown;
+          };
+
+          if (typeof candidate.message === "string") {
+            return candidate.message.trim();
+          }
+
+          if (typeof candidate.commitMessage === "string") {
+            return candidate.commitMessage.trim();
+          }
+
+          if (typeof candidate.text === "string") {
+            return candidate.text.trim();
+          }
+        }
+      } catch {
+      // Try next candidate.
+      }
+    }
+
+    return message;
+  }
+
+  private extractJsonArray(text: string): string | undefined {
+    const start = text.indexOf("[");
+    const end = text.lastIndexOf("]");
+
+    if (start === -1 || end === -1 || end <= start) {
+      return undefined;
+    }
+
+    return text.slice(start, end + 1);
+  }
+
+  private extractJsonObject(text: string): string | undefined {
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+
+    if (start === -1 || end === -1 || end <= start) {
+      return undefined;
+    }
+
+    return text.slice(start, end + 1);
   }
 
   async generate(
