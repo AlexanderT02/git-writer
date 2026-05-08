@@ -1,7 +1,9 @@
 #!/usr/bin/env node
+
 import { execFileSync } from "child_process";
 import chalk from "chalk";
 import { Command, InvalidArgumentError } from "commander";
+
 import { App } from "./core/App.js";
 import { GracefulExit } from "./errors.js";
 import { StatsRenderer } from "./stats/StatsRenderer.js";
@@ -60,10 +62,19 @@ function validateGitRef(value: string): string {
   return trimmed;
 }
 
-async function runCommit(options: CommitOptions): Promise<void> {
+function normalizeIssues(issues: string[]): string[] {
+  return issues
+    .map((issue) => issue.trim())
+    .filter(Boolean);
+}
+
+async function runCommit(
+  issues: string[],
+  options: CommitOptions,
+): Promise<void> {
   assertGitReady();
 
-  const app = new App(Boolean(options.fast));
+  const app = new App(Boolean(options.fast), normalizeIssues(issues));
   await app.runCommitInteractive();
 }
 
@@ -99,9 +110,10 @@ function createProgram(): Command {
     .command("commit")
     .alias("c")
     .description("Generate and create an AI-assisted commit")
+    .argument("[issues...]", "Issue references, e.g. 123 456")
     .option("-f, --fast", "Skip interactive refinement where possible")
-    .action(async (options: CommitOptions) => {
-      await runCommit(options);
+    .action(async (issues: string[], options: CommitOptions) => {
+      await runCommit(issues, options);
     });
 
   program
