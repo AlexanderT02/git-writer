@@ -10,6 +10,7 @@ import { GracefulExit } from "./errors.js";
 import { StatsRenderer } from "./stats/StatsRenderer.js";
 import { ProviderSettings } from "./llm/ProviderSettings.js";
 import type { LLMProviderName } from "./config/config.js";
+import { realpathSync } from "fs";
 
 type StatsOptions = {
   reset?: boolean;
@@ -231,8 +232,14 @@ function runCli(): void {
   });
 }
 
-const isMain = process.argv[1] === fileURLToPath(import.meta.url);
+function isDirectRun(): boolean {
+  const entry = process.argv[1];
 
-if (isMain) {
+  if (!entry) return false;
+
+  return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url));
+}
+
+if (isDirectRun()) {
   runCli();
 }
