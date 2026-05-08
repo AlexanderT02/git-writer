@@ -133,6 +133,21 @@ export type PullRequestCreateResult =
     message: string;
   };
 
+export interface CompactFileSummary {
+  path: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  hunkHeaders: string[];
+  keyLines: string[];
+}
+
+export interface FileGroup {
+  label: string;
+  conventionalType: string;
+  files: string[];
+}
+
 export type UsageCommand = "commit" | "pr";
 
 export type LLMCallRole = "reasoning" | "generation";
