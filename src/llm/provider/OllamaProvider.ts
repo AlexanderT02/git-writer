@@ -1,4 +1,4 @@
-import type { AppConfig } from "../../config/config.js";
+import type { LLMProviderConfig } from "../../config/config.js";
 import type { LLMResult, LLMUsage } from "../../types/types.js";
 import type { LLM } from "../LLM.js";
 
@@ -9,7 +9,7 @@ type OllamaGenerateResponse = {
 };
 
 export class OllamaProvider implements LLM {
-  constructor(private readonly config: AppConfig) {}
+  constructor(private readonly config: LLMProviderConfig) {}
 
   async complete(prompt: string): Promise<LLMResult> {
     const response = await fetch("http://localhost:11434/api/generate", {
@@ -18,7 +18,7 @@ export class OllamaProvider implements LLM {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: this.config.llm.reasoningModel,
+        model: this.config.reasoningModel,
         prompt,
         stream: false,
       }),
@@ -45,7 +45,7 @@ export class OllamaProvider implements LLM {
      * use non-streaming generate, then render once.
      */
     const result = await this.completeWithModel(
-      this.config.llm.generationModel,
+      this.config.generationModel,
       prompt,
     );
 

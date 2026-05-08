@@ -1,12 +1,12 @@
 import OpenAI from "openai";
-import type { AppConfig } from "../../config/config.js";
+import type { LLMProviderConfig } from "../../config/config.js";
 import type { LLM } from "../LLM.js";
 import type { LLMResult, LLMUsage } from "../../types/types.js";
 
 export class OpenAIProvider implements LLM {
   private readonly client: OpenAI;
 
-  constructor(private readonly config: AppConfig) {
+  constructor(private readonly config: LLMProviderConfig) {
     if (!process.env.OPENAI_API_KEY) {
       throw new Error("OPENAI_API_KEY is not set");
     }
@@ -18,7 +18,7 @@ export class OpenAIProvider implements LLM {
 
   async complete(prompt: string): Promise<LLMResult> {
     const response = await this.client.responses.create({
-      model: this.config.llm.reasoningModel,
+      model: this.config.reasoningModel,
       input: prompt,
     });
 
@@ -33,7 +33,7 @@ export class OpenAIProvider implements LLM {
     onText: (text: string) => void,
   ): Promise<LLMResult> {
     const stream = await this.client.responses.stream({
-      model: this.config.llm.generationModel,
+      model: this.config.generationModel,
       input: prompt,
     });
 
