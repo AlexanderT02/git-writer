@@ -70,30 +70,18 @@ gw --help
 
 ---
 
-## Usage
+## Commit workflow
+
+`gw commit` starts the interactive commit flow. The short alias is `gw c`.
+
+It lets you select files, stages them, analyzes the staged diff, and generates a Conventional Commit message.
 
 ```bash
 gw commit
 gw c
-gw commit --fast
-gw c -f
-
-gw pr
-gw p
-gw pr --base origin/main
-gw p -b develop
-
-gw stats
-gw s week
-
-gw --help
 ```
 
----
-
-## Commit workflow
-
-`gw commit` can select files, stage changes, generate a Conventional Commit message, and let you edit, regenerate, refine, copy, or commit the result.
+You can then commit, edit, regenerate, refine, copy, or cancel the generated message.
 
 Issue references can be passed directly:
 
@@ -104,13 +92,38 @@ gw c 42 99
 
 Git Writer can also infer issue references from branch names such as `feature/123-login` or `fix/456-auth-error`.
 
+### Fast commit mode
+
+Fast mode skips all interaction and generates the commit message directly.
+
+```bash
+gw commit --fast
+gw c -f
+```
+
 ---
 
 ## Pull request workflow
 
-`gw pr` compares your current branch against a base branch and generates a PR title and Markdown body.
+`gw pr` starts the pull request flow. The short alias is `gw p`.
 
-It uses the current branch, issue reference, commits ahead of the base branch, diff stats, changed files, and relevant file context.
+It compares the current branch against a base branch and generates a PR title plus Markdown body.
+
+```bash
+gw pr
+gw p
+```
+
+By default, Git Writer compares against `origin/main`.
+
+Use another base branch:
+
+```bash
+gw pr --base origin/main
+gw p -b develop
+```
+
+The PR text is based on the current branch, issue reference, commits ahead of the base branch, diff stats, changed files, and relevant file context.
 
 If the GitHub CLI is installed and authenticated, Git Writer can also create the pull request for you.
 
@@ -118,7 +131,7 @@ If the GitHub CLI is installed and authenticated, Git Writer can also create the
 
 ## How it works
 
-Git Writer builds a compact Git context, then uses two LLM passes.
+Git Writer builds a compact Git context, then uses two LLM steps.
 
 First, it analyzes the change:
 
@@ -132,49 +145,65 @@ Then it generates the final output:
 - a Conventional Commit message for `gw commit`
 - a Markdown PR title and body for `gw pr`
 
-Context is kept compact by adjusting file detail based on file size and token budget. Small files may include full before/after content, larger files use diff context, and very large files use minimal diff context.
+Context size is adjusted automatically. Small files can include full before/after content. Larger files use focused diff context. Very large files use minimal context to stay within the token budget.
 
 ---
 
 ## LLM providers
 
-The active provider and models are configured in:
+Git Writer supports multiple LLM providers through the provider layer in `src/llm/provider`.
+
+The available providers and models are configured in:
 
 ```txt
 src/config/config.ts
 ```
 
-Example OpenAI config:
+Example:
 
 ```ts
 export const config = {
   llm: {
-    provider: "openai",
-    reasoningModel: "gpt-4o-mini",
-    generationModel: "gpt-4o-mini",
+    defaultProvider: "openai",
+    providers: {
+      openai: {
+        reasoningModel: "gpt-4o-mini",
+        generationModel: "gpt-4o-mini",
+      },
+      ollama: {
+        reasoningModel: "llama3.1",
+        generationModel: "llama3.1",
+      },
+      gemini: {
+        reasoningModel: "gemini-2.5-flash",
+        generationModel: "gemini-2.5-flash-lite",
+      },
+    },
   },
 };
 ```
 
-Example Ollama config:
-
-```ts
-export const config = {
-  llm: {
-    provider: "ollama",
-    reasoningModel: "llama3.1",
-    generationModel: "llama3.1",
-  },
-};
-```
-
-Start Ollama before using the Ollama provider:
+Check the active provider:
 
 ```bash
-ollama serve
+gw provider get
 ```
 
-With Ollama, generation stays local and no OpenAI API key is required.
+Change the active provider:
+
+```bash
+gw provider set openai
+gw provider set ollama
+gw provider set gemini
+```
+
+The selected provider is stored in:
+
+```txt
+~/.git-writer/config.json
+```
+
+This overrides the source default from `config.llm.defaultProvider`. The model names still come from `src/config/config.ts`.
 
 ---
 
@@ -212,9 +241,3 @@ git diff <base-branch>...HEAD
 Do not send secrets, credentials, private keys, tokens, or confidential data to external LLM providers.
 
 Use Ollama or another local provider for local-only generation.
-
----
-
-## License
-
-[MIT](LICENSE)
