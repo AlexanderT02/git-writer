@@ -17,11 +17,13 @@ type StatsOptions = {
 };
 
 type CommitOptions = {
-  fast?: boolean;
+  force?: boolean;
 };
 
 type PROptions = {
   base?: string;
+  auto?: boolean;
+  force?: boolean;
 };
 
 function assertGitInstalled(): void {
@@ -94,7 +96,7 @@ async function runCommit(
   assertGitReady();
 
   const provider = new ProviderSettings().getCurrentProvider();
-  const app = new App(Boolean(options.fast), normalizeIssues(issues), provider);
+  const app = new App(Boolean(options.force), normalizeIssues(issues), provider);
 
   await app.runCommitInteractive();
 }
@@ -103,7 +105,9 @@ async function runPR(options: PROptions): Promise<void> {
   assertGitReady();
 
   const provider = new ProviderSettings().getCurrentProvider();
-  const app = new App(false, [], provider);
+  const isAuto = Boolean(options.auto) || Boolean(options.force);
+  const isForce = Boolean(options.force);
+  const app = new App(isAuto, [], provider, isForce);
 
   await app.runPRInteractive(options.base);
 }
@@ -134,7 +138,10 @@ export function createProgram(): Command {
     .alias("c")
     .description("Generate and create an AI-assisted commit")
     .argument("[issues...]", "Issue references, e.g. 123 456")
-    .option("-f, --fast", "Skip interactive refinement where possible")
+    .option(
+      "-f, --force",
+      "Skip the interactive menu and commit directly; large changes may be split into multiple logical commits",
+    )
     .action(async (issues: string[], options: CommitOptions) => {
       await runCommit(issues, options);
     });
@@ -148,6 +155,8 @@ export function createProgram(): Command {
       "Base branch used to compare changes, e.g. origin/main",
       validateGitRef,
     )
+    .option("-a, --auto", "Auto mode: commit, push, and create PR with confirmations")
+    .option("-f, --force", "Force mode: commit, push, and create PR without confirmations")
     .action(async (options: PROptions) => {
       await runPR(options);
     });
