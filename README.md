@@ -35,8 +35,8 @@ Use `gw --help` for the full command reference.
 ## Install
 
 ```bash
-git clone https://github.com/AlexanderT02/git-commit-writer.git
-cd git-commit-writer
+git clone https://github.com/AlexanderT02/git-writer.git
+cd git-writer
 npm install
 npm run build
 npm link
