@@ -103,6 +103,7 @@ export type PullRequestCreateResult =
   | {
     status: "created";
     url: string;
+    message: string;
   }
   | {
     status: "already_exists";
