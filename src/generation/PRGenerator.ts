@@ -129,50 +129,33 @@ ${reasoning}`;
   async generate(prContext: PRContext): Promise<PRGenerationResult> {
     const spinner = ora("Analyzing PR context...").start();
 
-    let reasoning = "";
-    let reasoningUsage: PRGenerationResult["usage"]["reasoning"];
+    let reasoningResult: Awaited<ReturnType<typeof this.ai.complete>>;
+    let outputResult: Awaited<ReturnType<typeof this.ai.complete>>;
 
     try {
-      const reasoningResult = await this.withRetry(() =>
+      reasoningResult = await this.withRetry(() =>
         this.ai.complete(this.buildReasoningPrompt(prContext)),
       );
 
-      reasoning = reasoningResult.text;
-      reasoningUsage = reasoningResult.usage;
-    } catch {
-      reasoning = "";
-      reasoningUsage = undefined;
-    }
+      spinner.text = "Generating PR Markdown...";
 
-    spinner.text = "Generating PR Markdown...";
-
-    let output = "";
-    let generationUsage: PRGenerationResult["usage"]["generation"];
-
-    try {
-      const outputResult = await this.withRetry(() =>
-        this.ai.complete(this.buildMessagePrompt(reasoning)),
+      outputResult = await this.withRetry(() =>
+        this.ai.complete(this.buildMessagePrompt(reasoningResult.text)),
       );
-
-      output = outputResult.text;
-      generationUsage = outputResult.usage;
-    } catch {
-      output = "";
-      generationUsage = undefined;
+    } finally {
+      spinner.stop();
     }
 
-    spinner.stop();
-
-    const parsed = this.parsePROutput(output);
+    const parsed = this.parsePROutput(outputResult.text);
 
     return {
       ...parsed,
       usage: {
-        reasoning: reasoningUsage,
-        generation: generationUsage,
+        reasoning: reasoningResult.usage,
+        generation: outputResult.usage,
         totalTokens:
-          (reasoningUsage?.totalTokens ?? 0) +
-          (generationUsage?.totalTokens ?? 0),
+        (reasoningResult.usage?.totalTokens ?? 0) +
+        (outputResult.usage?.totalTokens ?? 0),
       },
     };
   }

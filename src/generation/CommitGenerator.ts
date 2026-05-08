@@ -244,35 +244,35 @@ ${sections}`;
 
     const spinner = ora("Analysing intent...").start();
 
-    let reasoning = "";
-    let reasoningUsage: CommitGenerationResult["usage"]["reasoning"];
+    let reasoningResult: Awaited<ReturnType<typeof this.ai.complete>>;
 
     try {
-      const reasoningResult = await this.withRetry(() =>
+      reasoningResult = await this.withRetry(() =>
         this.ai.complete(reasoningPrompt),
       );
-
-      reasoning = reasoningResult.text;
-      reasoningUsage = reasoningResult.usage;
-    } catch {
-      reasoning = "";
-      reasoningUsage = undefined;
+    } finally {
+      spinner.stop();
     }
+
+    const reasoning = reasoningResult.text;
+    const reasoningUsage = reasoningResult.usage;
 
     const messagePrompt = this.buildMessagePrompt(files, context, reasoning);
 
-    spinner.stop();
-
     const streamSpinner = ora("Generating commit message...").start();
 
-    const result = await this.withRetry(() =>
-      this.ai.stream(messagePrompt, (text) => {
-        streamSpinner.stop();
-        UI.render(text, this.config);
-      }),
-    );
+    let result: Awaited<ReturnType<typeof this.ai.stream>>;
 
-    streamSpinner.stop();
+    try {
+      result = await this.withRetry(() =>
+        this.ai.stream(messagePrompt, (text) => {
+          streamSpinner.stop();
+          UI.render(text, this.config);
+        }),
+      );
+    } finally {
+      streamSpinner.stop();
+    }
 
     return {
       message: this.sanitizeCommitMessage(result.text),
@@ -280,8 +280,8 @@ ${sections}`;
         reasoning: reasoningUsage,
         generation: result.usage,
         totalTokens:
-          (reasoningUsage?.totalTokens ?? 0) +
-          (result.usage?.totalTokens ?? 0),
+        (reasoningUsage?.totalTokens ?? 0) +
+        (result.usage?.totalTokens ?? 0),
       },
     };
   }
