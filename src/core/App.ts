@@ -45,37 +45,28 @@ export class App {
   private readonly commitContext: CommitContextBuilder;
   private readonly prContext: PRContextBuilder;
   private readonly commitGenerator: CommitGenerator;
-  private readonly issueRefs: string[] | null;
+  private issueRefs: string[] = [];
   private readonly fastMode: boolean;
   private readonly gitPR: GitPRService;
   private readonly githubCli: GitHubCLIService;
   private readonly tracker: UsageTracker;
 
-  constructor(fastMode = false) {
+  constructor(fastMode = false, issueRefs: string[] = []) {
     this.fastMode = fastMode;
+    this.issueRefs = issueRefs;
     this.git = new GitService(config);
     this.ai = createLLM(config);
     this.staging = new StagingService(this.git, config);
     this.commitContext = new CommitContextBuilder(this.git, config);
     this.prContext = new PRContextBuilder(this.git, config);
     this.commitGenerator = new CommitGenerator(this.ai, config);
-    this.issueRefs = this.parseIssueRefs();
     this.gitPR = new GitPRService(this.git, config);
     this.githubCli = new GitHubCLIService(this.git);
     this.tracker = new UsageTracker();
   }
 
-  parseIssueRefs(): string[] | null {
-    const args = process.argv.slice(2);
-    const nums = args.filter((arg) => /^\d+$/.test(arg));
-
-    if (!nums.length) return null;
-
-    return nums.map((num) => `#${num}`);
-  }
-
-  appendIssueRefs(message: string): string {
-    if (!this.issueRefs) return message;
+  private appendIssueRefs(message: string): string {
+    if (!this.issueRefs.length) return message;
 
     return `${message}\n\nrefs ${this.issueRefs.join(", ")}`;
   }
