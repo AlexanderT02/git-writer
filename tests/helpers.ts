@@ -65,6 +65,12 @@ export function createTestConfig(overrides: Partial<AppConfig> = {}): AppConfig 
       preferredBulletCount: 2,
       maxBulletCount: 3,
     },
+    
+    grouping: {
+        splitThreshold: 8,
+        maxGroups: 10,
+    },
+    
     ui: {
       clearScreen: true,
       borderWidth: 60,

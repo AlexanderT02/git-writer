@@ -55,6 +55,16 @@ vi.mock("../src/llm/Factory.js", () => ({
   createLLMProvider: vi.fn(() => mockLLM),
 }));
 
+const mockCollectSummaries = vi.fn();
+const mockGroupChanges = vi.fn();
+
+vi.mock("../src/generation/ChangeGrouper.js", () => ({
+  ChangeGrouper: vi.fn().mockImplementation(() => ({
+    collectSummaries: mockCollectSummaries,
+    group: mockGroupChanges,
+  })),
+}));
+
 describe("Commit flow integration", () => {
   let cwd: string;
   let repo: string;
@@ -75,6 +85,8 @@ describe("Commit flow integration", () => {
 
     mockLLM.complete.mockClear();
     mockLLM.stream.mockClear();
+    mockCollectSummaries.mockReset();
+    mockGroupChanges.mockReset();
 
     mockLLM.complete.mockResolvedValue({
       text: [
@@ -244,31 +256,6 @@ describe("Commit flow integration", () => {
     expect(git("status", "--porcelain")).toBe("");
   });
 
-  it("aborts fast mode when too many files are staged", async () => {
-    const { App } = await import("../src/core/App.js");
-
-    for (let i = 0; i < 51; i++) {
-      writeFileSync(`file-${i}.ts`, `export const value${i} = ${i};\n`);
-    }
-
-    const before = commitCount();
-
-    const app = new App(true, [], "openai");
-
-    await expect(app.runCommitInteractive()).rejects.toMatchObject({
-      code: 1,
-    } satisfies Partial<GracefulExit>);
-
-    expect(commitCount()).toBe(before);
-    expect(mockLLM.complete).not.toHaveBeenCalled();
-    expect(mockLLM.stream).not.toHaveBeenCalled();
-
-    const status = git("status", "--porcelain");
-
-    expect(status).toContain("A  file-0.ts");
-    expect(status).toContain("A  file-50.ts");
-  });
-
   it("records usage stats after a successful commit", async () => {
     const { App } = await import("../src/core/App.js");
 
@@ -303,6 +290,121 @@ describe("Commit flow integration", () => {
     expect(entry.fileCount).toBe(1);
     expect(entry.branch).toBe(git("rev-parse", "--abbrev-ref", "HEAD"));
   });
+
+  it("uses split fast mode when the staged file count reaches the grouping threshold", async () => {
+    const { App } = await import("../src/core/App.js");
+    const { config } = await import("../src/config/config.js");
+
+    const splitThreshold = config.grouping.splitThreshold;
+
+    for (let i = 0; i < splitThreshold; i++) {
+        writeFileSync(`file-${i}.ts`, `export const value${i} = ${i};\n`);
+    }
+
+    const firstGroupFiles = Array.from(
+        { length: Math.ceil(splitThreshold / 2) },
+        (_, i) => `file-${i}.ts`,
+    );
+
+    const secondGroupFiles = Array.from(
+        { length: splitThreshold - firstGroupFiles.length },
+        (_, i) => `file-${i + firstGroupFiles.length}.ts`,
+    );
+
+    mockCollectSummaries.mockReturnValue(
+        Array.from({ length: splitThreshold }, (_, i) => ({
+        file: `file-${i}.ts`,
+        status: "A",
+        additions: 1,
+        deletions: 0,
+        summary: `file-${i}.ts added`,
+        })),
+    );
+
+    mockGroupChanges.mockResolvedValue({
+        groups: [
+        {
+            label: "core files",
+            conventionalType: "feat",
+            files: firstGroupFiles,
+        },
+        {
+            label: "supporting files",
+            conventionalType: "chore",
+            files: secondGroupFiles,
+        },
+        ],
+    });
+
+    mockLLM.stream
+        .mockResolvedValueOnce({
+        text: [
+            "feat(core): add core files",
+            "",
+            "- Add first group of files",
+        ].join("\n"),
+        usage: {
+            inputTokens: 100,
+            outputTokens: 30,
+            totalTokens: 130,
+        },
+        })
+        .mockResolvedValueOnce({
+        text: [
+            "chore(files): add supporting files",
+            "",
+            "- Add second group of files",
+        ].join("\n"),
+        usage: {
+            inputTokens: 100,
+            outputTokens: 30,
+            totalTokens: 130,
+        },
+        });
+
+    const before = commitCount();
+
+    const app = new App(true, [], "openai");
+
+    await expect(app.runCommitInteractive()).rejects.toMatchObject({
+        code: 0,
+    } satisfies Partial<GracefulExit>);
+
+    expect(mockCollectSummaries).toHaveBeenCalledTimes(1);
+    expect(mockGroupChanges).toHaveBeenCalledTimes(1);
+
+    expect(mockLLM.complete).toHaveBeenCalledTimes(2);
+    expect(mockLLM.stream).toHaveBeenCalledTimes(2);
+
+    expect(commitCount()).toBe(before + 2);
+
+    const lastTwoSubjects = git("log", "-2", "--pretty=%s")
+        .split("\n")
+        .filter(Boolean);
+
+    expect(lastTwoSubjects).toEqual([
+        "chore(files): add supporting files",
+        "feat(core): add core files",
+    ]);
+
+    const firstCommitFiles = git(
+        "show",
+        "--name-only",
+        "--pretty=",
+        "HEAD~1",
+    )
+        .split("\n")
+        .filter(Boolean);
+
+    const secondCommitFiles = git("show", "--name-only", "--pretty=", "HEAD")
+        .split("\n")
+        .filter(Boolean);
+
+    expect(firstCommitFiles).toEqual(firstGroupFiles);
+    expect(secondCommitFiles).toEqual(secondGroupFiles);
+
+    expect(git("status", "--porcelain")).toBe("");
+    });
 });
 
 function git(...args: string[]): string {
