@@ -2,12 +2,43 @@ import { describe, it, expect, vi } from "vitest";
 import { createTestConfig } from "./helpers.js";
 
 describe("createLLM factory", () => {
-  it("throws for unsupported provider", async () => {
+  it("throws when default provider has no model config", async () => {
     // Dynamic import to avoid top-level side effects
-    const { createLLM } = await import("../src/llm/index.js");
+    const { createLLMProvider: createLLM } = await import("../src/llm/Factory.js");
+
     const config = createTestConfig();
-    (config.llm as any).provider = "nonexistent";
-    expect(() => createLLM(config)).toThrow("Unsupported LLM provider");
+
+    (config.llm as any).defaultProvider = "nonexistent";
+
+    expect(() => createLLM(config)).toThrow(
+      "Missing config for LLM provider: nonexistent",
+    );
+  });
+
+  it("throws when provider override has no model config", async () => {
+    const { createLLMProvider: createLLM } = await import("../src/llm/Factory.js");
+
+    const config = createTestConfig();
+
+    expect(() => createLLM(config, "nonexistent" as any)).toThrow(
+      "Missing config for LLM provider: nonexistent",
+    );
+  });
+
+  it("throws when provider has config but no implementation", async () => {
+    const { createLLMProvider: createLLM } = await import("../src/llm/Factory.js");
+
+    const config = createTestConfig();
+
+    (config.llm as any).defaultProvider = "fake";
+    (config.llm.providers as any).fake = {
+      reasoningModel: "fake-reasoning",
+      generationModel: "fake-generation",
+    };
+
+    expect(() => createLLM(config)).toThrow(
+      "Unsupported LLM provider: fake",
+    );
   });
 });
 
