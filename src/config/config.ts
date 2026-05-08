@@ -1,4 +1,13 @@
-export type LLMProviderName = "openai" | "ollama";
+export type LLMProviderName = "openai" | "ollama" | "gemini";
+
+export interface LLMModelConfig {
+  reasoningModel: string;
+  generationModel: string;
+}
+
+export interface LLMProviderConfig extends LLMModelConfig {
+  provider: LLMProviderName;
+}
 
 export interface AppConfig {
   app: {
@@ -7,9 +16,8 @@ export interface AppConfig {
   };
 
   llm: {
-    provider: LLMProviderName;
-    reasoningModel: string;
-    generationModel: string;
+    defaultProvider: LLMProviderName;
+    providers: Record<LLMProviderName, LLMModelConfig>;
   };
 
   git: {
@@ -75,9 +83,21 @@ export const config: AppConfig = {
 
   // LLM backend and models used by the two-pass generation flow.
   llm: {
-    provider: "openai",
-    reasoningModel: "gpt-4o-mini",
-    generationModel: "gpt-5.4-mini",
+    defaultProvider: "openai",
+    providers: {
+      openai: {
+        reasoningModel: "gpt-4o-mini",
+        generationModel: "gpt-5.4-mini",
+      },
+      ollama: {
+        reasoningModel: "llama3.1",
+        generationModel: "llama3.1",
+      },
+      gemini: {
+        reasoningModel: "gemini-2.5-flash",
+        generationModel: "gemini-2.5-flash-lite",
+      },
+    },
   },
 
   // Git limits used while collecting repository metadata and diff context.

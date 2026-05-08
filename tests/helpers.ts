@@ -7,9 +7,21 @@ export function createTestConfig(overrides: Partial<AppConfig> = {}): AppConfig 
   return {
     app: { name: "git-writer", command: "gw" },
     llm: {
-      provider: "openai",
-      reasoningModel: "gpt-4o-mini",
-      generationModel: "gpt-5.4-mini",
+    defaultProvider: "openai",
+    providers: {
+        openai: {
+        reasoningModel: "gpt-4o-mini",
+        generationModel: "gpt-5.4-mini",
+        },
+        ollama: {
+        reasoningModel: "llama3.1",
+        generationModel: "llama3.1",
+        },
+        gemini: {
+        reasoningModel: "gemini-2.5-flash",
+        generationModel: "gemini-2.5-flash-lite",
+        },
+    },
     },
     git: {
       recentCommitCount: 8,

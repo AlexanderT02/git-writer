@@ -3,10 +3,12 @@
 import { execFileSync } from "child_process";
 import chalk from "chalk";
 import { Command, InvalidArgumentError } from "commander";
-
+import { config } from "./config/config.js";
 import { App } from "./core/App.js";
 import { GracefulExit } from "./errors.js";
 import { StatsRenderer } from "./stats/StatsRenderer.js";
+import { ProviderSettings } from "./llm/ProviderSettings.js";
+import type { LLMProviderName } from "./config/config.js";
 
 type StatsOptions = {
   reset?: boolean;
@@ -62,6 +64,21 @@ function validateGitRef(value: string): string {
   return trimmed;
 }
 
+function validateProvider(value: string): LLMProviderName {
+  const settings = new ProviderSettings();
+  const trimmed = value.trim();
+
+  if (!settings.isProviderName(trimmed)) {
+    throw new InvalidArgumentError(
+      `Invalid provider "${value}". Expected one of: ${settings
+        .availableProviders()
+        .join(", ")}`,
+    );
+  }
+
+  return trimmed;
+}
+
 function normalizeIssues(issues: string[]): string[] {
   return issues
     .map((issue) => issue.trim())
@@ -74,14 +91,18 @@ async function runCommit(
 ): Promise<void> {
   assertGitReady();
 
-  const app = new App(Boolean(options.fast), normalizeIssues(issues));
+  const provider = new ProviderSettings().getCurrentProvider();
+  const app = new App(Boolean(options.fast), normalizeIssues(issues), provider);
+
   await app.runCommitInteractive();
 }
 
 async function runPR(options: PROptions): Promise<void> {
   assertGitReady();
 
-  const app = new App(false);
+  const provider = new ProviderSettings().getCurrentProvider();
+  const app = new App(false, [], provider);
+
   await app.runPRInteractive(options.base);
 }
 
@@ -127,6 +148,45 @@ function createProgram(): Command {
     )
     .action(async (options: PROptions) => {
       await runPR(options);
+    });
+
+  const providerCommand = program
+    .command("provider")
+    .description("Manage the active LLM provider");
+
+  providerCommand
+    .command("get")
+    .description("Show the currently active LLM provider and models")
+    .action(() => {
+      const settings = new ProviderSettings();
+      const provider = settings.getCurrentProvider();
+      const providerConfig = config.llm.providers[provider];
+
+      console.log("");
+      console.log(`Active provider:   ${chalk.cyan(provider)}`);
+      console.log(`Reasoning model:   ${chalk.cyan(providerConfig.reasoningModel)}`);
+      console.log(`Generation model:  ${chalk.cyan(providerConfig.generationModel)}`);
+      console.log("");
+      console.log(
+        chalk.gray(
+          "Hint: To change active provider models, edit ~/.git-writer/config.json.",
+        ),
+      );
+      console.log("");
+    });
+
+  providerCommand
+    .command("set")
+    .description("Set the active LLM provider")
+    .argument(
+      "<provider>",
+      "Provider name, e.g. openai, ollama or gemini",
+      validateProvider,
+    )
+    .action((provider: LLMProviderName) => {
+      new ProviderSettings().setProvider(provider);
+
+      console.log(chalk.green(`\n✔ Active provider set to ${provider}\n`));
     });
 
   program

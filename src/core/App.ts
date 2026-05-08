@@ -1,11 +1,12 @@
 import clipboard from "clipboardy";
 
+import type { LLMProviderConfig, LLMProviderName } from "../config/config.js";
 import { config } from "../config/config.js";
 import { CommitGenerator } from "../generation/CommitGenerator.js";
 import { CommitContextBuilder } from "../context/CommitContextBuilder.js";
 import { PRContextBuilder } from "../context/PRContextBuilder.js";
 import { GitService } from "../git/GitService.js";
-import { createLLM } from "../llm/index.js";
+import { createLLMProvider } from "../llm/Factory.js";
 import { StagingService } from "../staging/StagingService.js";
 import { UI } from "../ui/UI.js";
 import type { LLM } from "../llm/LLM.js";
@@ -46,16 +47,30 @@ export class App {
   private readonly prContext: PRContextBuilder;
   private readonly commitGenerator: CommitGenerator;
   private issueRefs: string[] = [];
+  private readonly providerName: LLMProviderName;
+  private readonly llmConfig: LLMProviderConfig;
   private readonly fastMode: boolean;
   private readonly gitPR: GitPRService;
   private readonly githubCli: GitHubCLIService;
   private readonly tracker: UsageTracker;
 
-  constructor(fastMode = false, issueRefs: string[] = []) {
+  constructor(
+    fastMode = false,
+    issueRefs: string[] = [],
+    providerOverride?: LLMProviderName,
+  ) {
     this.fastMode = fastMode;
     this.issueRefs = issueRefs;
+
+    this.providerName = providerOverride ?? config.llm.defaultProvider;
+
+    this.llmConfig = {
+      ...config.llm.providers[this.providerName],
+      provider: this.providerName,
+    };
+
     this.git = new GitService(config);
-    this.ai = createLLM(config);
+    this.ai = createLLMProvider(config, this.providerName);
     this.staging = new StagingService(this.git, config);
     this.commitContext = new CommitContextBuilder(this.git, config);
     this.prContext = new PRContextBuilder(this.git, config);
@@ -390,9 +405,9 @@ export class App {
     return {
       timestamp: new Date().toISOString(),
       command,
-      provider: config.llm.provider,
-      reasoningModel: config.llm.reasoningModel,
-      generationModel: config.llm.generationModel,
+      provider: this.providerName,
+      reasoningModel: this.llmConfig.reasoningModel,
+      generationModel: this.llmConfig.generationModel,
 
       llmCalls,
 
@@ -470,8 +485,8 @@ export class App {
     if (usage.reasoning) {
       calls.push({
         role: "reasoning",
-        provider: config.llm.provider,
-        model: config.llm.reasoningModel,
+        provider: this.providerName,
+        model: this.llmConfig.reasoningModel,
         tokens: {
           inputTokens: usage.reasoning.inputTokens,
           outputTokens: usage.reasoning.outputTokens,
@@ -486,8 +501,8 @@ export class App {
     if (usage.generation) {
       calls.push({
         role: "generation",
-        provider: config.llm.provider,
-        model: config.llm.generationModel,
+        provider: this.providerName,
+        model: this.llmConfig.generationModel,
         tokens: {
           inputTokens: usage.generation.inputTokens,
           outputTokens: usage.generation.outputTokens,
