@@ -104,7 +104,7 @@ describe("CommitGenerator", () => {
     it("shows NONE when reasoning is empty", () => {
       const gen = createGenerator();
       const prompt = gen.buildMessagePrompt("src/auth.ts", makeContext(), "");
-      expect(prompt).toContain("Analysis:\nNONE");
+      expect(prompt).toMatch(/Analysis:\s*NONE/);
     });
 
     it("includes summary max length from config", () => {

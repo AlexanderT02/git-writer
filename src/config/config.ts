@@ -148,7 +148,7 @@ export const config: AppConfig = {
 
   // Auto-split grouping for fast mode with many files.
   grouping: {
-    splitThreshold: 8,
+    splitThreshold: 4,
     maxGroups: 10,
   },
 
