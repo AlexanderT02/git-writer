@@ -169,7 +169,7 @@ function createProgram(): Command {
       console.log("");
       console.log(
         chalk.gray(
-          "Hint: To change active provider models, edit ~/.git-writer/config.json.",
+          "Hint: To use different models, add a new provider profile in src/config/config.ts.",
         ),
       );
       console.log("");
