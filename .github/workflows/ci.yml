@@ -10,7 +10,7 @@ on:
 
 jobs:
   check:
-    name: Lint and build
+    name: Lint, test and build
     runs-on: ubuntu-latest
 
     strategy:
@@ -34,3 +34,6 @@ jobs:
 
       - name: Check
         run: npm run check
+
+      - name: Test
+        run: npm test
