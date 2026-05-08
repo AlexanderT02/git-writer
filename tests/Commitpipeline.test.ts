@@ -1,5 +1,5 @@
 /**
- * Integration test: Commit Pipeline
+ * unit test: Commit Pipeline
  *
  * Wires the real CommitContextBuilder → CommitGenerator chain together
  * using a mock GitService and mock LLM.  Verifies that the full flow —
@@ -65,7 +65,7 @@ function setupPipeline(opts: {
   return { git, llm, contextBuilder, generator, config, files };
 }
 
-describe("Commit Pipeline Integration", () => {
+describe("Commit Pipeline Unit", () => {
   it("produces a valid commit message from staged changes", async () => {
     const { contextBuilder, generator, files } = setupPipeline({});
 

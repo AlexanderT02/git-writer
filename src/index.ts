@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "child_process";
+import { fileURLToPath } from "url";
 import chalk from "chalk";
 import { Command, InvalidArgumentError } from "commander";
 import { config } from "./config/config.js";
@@ -118,7 +119,7 @@ function runStats(period: string | undefined, options: StatsOptions): void {
   renderer.render(period);
 }
 
-function createProgram(): Command {
+export function createProgram(): Command {
   const program = new Command();
 
   program
@@ -164,8 +165,12 @@ function createProgram(): Command {
 
       console.log("");
       console.log(`Active provider:   ${chalk.cyan(provider)}`);
-      console.log(`Reasoning model:   ${chalk.cyan(providerConfig.reasoningModel)}`);
-      console.log(`Generation model:  ${chalk.cyan(providerConfig.generationModel)}`);
+      console.log(
+        `Reasoning model:   ${chalk.cyan(providerConfig.reasoningModel)}`,
+      );
+      console.log(
+        `Generation model:  ${chalk.cyan(providerConfig.generationModel)}`,
+      );
       console.log("");
       console.log(
         chalk.gray(
@@ -208,18 +213,26 @@ function createProgram(): Command {
   return program;
 }
 
-const program = createProgram();
+function runCli(): void {
+  const program = createProgram();
 
-program.parseAsync(process.argv).catch((error: unknown) => {
-  if (error instanceof GracefulExit) {
-    if (error.code !== 0 && error.message) {
-      console.error(chalk.red(`\n✖ ${error.message}\n`));
+  program.parseAsync(process.argv).catch((error: unknown) => {
+    if (error instanceof GracefulExit) {
+      if (error.code !== 0 && error.message) {
+        console.error(chalk.red(`\n✖ ${error.message}\n`));
+      }
+
+      process.exit(error.code);
     }
 
-    process.exit(error.code);
-  }
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(chalk.red(`\n✖ ${message}\n`));
+    process.exit(1);
+  });
+}
 
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(chalk.red(`\n✖ ${message}\n`));
-  process.exit(1);
-});
+const isMain = process.argv[1] === fileURLToPath(import.meta.url);
+
+if (isMain) {
+  runCli();
+}
