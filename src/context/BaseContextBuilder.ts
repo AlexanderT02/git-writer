@@ -228,5 +228,40 @@ export abstract class BaseContextBuilder {
     }
   }
 
+  protected isContentExcluded(file: string): boolean {
+    return this.config.context.excludedContentPatterns.some((pattern) =>
+      this.matchesPattern(file, pattern),
+    );
+  }
+
+  protected excluded(entry: ContextEntry): ContextResult {
+    return {
+      level: -1,
+      text: `=== ${entry.file} (${entry.status}) [excluded] ===\n[content excluded by config]`,
+    };
+  }
+
+  private matchesPattern(file: string, pattern: string): boolean {
+    const normalizedFile = file.replace(/\\/g, "/");
+    const normalizedPattern = pattern.replace(/\\/g, "/");
+
+    if (normalizedPattern === normalizedFile) {
+      return true;
+    }
+
+    if (!normalizedPattern.includes("*")) {
+      return normalizedFile.endsWith(`/${normalizedPattern}`);
+    }
+
+    const regex = new RegExp(
+      `^${normalizedPattern
+        .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+        .replace(/\*\*/g, ".*")
+        .replace(/\*/g, "[^/]*")}$`,
+    );
+
+    return regex.test(normalizedFile);
+  }
+
   protected abstract getChangeSize(file: string): ChangeSize;
 }

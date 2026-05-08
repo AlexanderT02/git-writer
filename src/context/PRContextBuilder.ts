@@ -94,6 +94,10 @@ export class PRContextBuilder extends BaseContextBuilder {
       return this.unknownFile();
     }
 
+    if (this.isContentExcluded(entry.file)) {
+      return this.excluded(entry);
+    }
+
     const size = this.getPRChangeSize(baseBranch, entry.file);
 
     if (size.binary) {

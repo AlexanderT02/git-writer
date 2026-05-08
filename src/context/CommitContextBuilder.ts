@@ -92,6 +92,10 @@ export class CommitContextBuilder extends BaseContextBuilder {
       return this.unknownFile();
     }
 
+    if (this.isContentExcluded(entry.file)) {
+      return this.excluded(entry);
+    }
+
     const size = this.getChangeSize(entry.file);
 
     if (size.binary) {
