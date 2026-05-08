@@ -30,6 +30,7 @@ export interface AppConfig {
     smallFileThreshold: number;
     contextLines: number;
     maxFileBufferBytes: number;
+    excludedContentPatterns: string[];
   };
 
   staging: {
@@ -99,6 +100,17 @@ export const config: AppConfig = {
     maxFileBufferBytes: 10 * 1024 * 1024,
     fastModeTokenLimit: 80_000,
     fastModeFileLimit: 50,
+    excludedContentPatterns: [
+      "package-lock.json",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+      "bun.lockb",
+      "dist/**",
+      "build/**",
+      "coverage/**",
+      "*.min.js",
+      "*.min.css",
+    ],
   },
 
   // Interactive staging prompt behavior.

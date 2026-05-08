@@ -28,6 +28,18 @@ export function createTestConfig(overrides: Partial<AppConfig> = {}): AppConfig 
       maxFileBufferBytes: 10 * 1024 * 1024,
       fastModeTokenLimit: 80_000,
       fastModeFileLimit: 50,
+      excludedContentPatterns: [
+        "package-lock.json",
+        "pnpm-lock.yaml",
+        "yarn.lock",
+        "bun.lockb",
+        "dist/**",
+        "build/**",
+        "coverage/**",
+        "vendor/**",
+        "**/*.min.js",
+        "**/*.min.css",
+      ],
     },
     staging: {
       pageSize: 25,

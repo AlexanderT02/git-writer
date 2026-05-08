@@ -11,7 +11,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
 
   {
-    files: ["src/**/*.ts"],
+    files: ["src/**/*.ts", "tests/**/*.ts"],
     plugins: {
       "@stylistic": stylistic,
     },

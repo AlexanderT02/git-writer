@@ -233,5 +233,32 @@ describe("CommitContextBuilder", () => {
       const context = builder.build("a.ts\nb.ts");
       expect(context.recentStyleHints).toBe("");
     });
+
+    it("excludes configured files from context content but keeps filename marker", () => {
+      const builder = createBuilder({
+        getCurrentBranchContext: { branch: "main", issue: null },
+        getStagedShortStat: "1 file changed",
+        getRecentCommitLines: "",
+        getStagedNameStatus: "M\tpackage-lock.json",
+        getStagedFileSummaryLines: "",
+        getRecentCommitStyleHints: "",
+        getStagedDiffForPrompt: "diff preview",
+        getChangedSymbolsFromStagedDiff: "",
+
+        // These should not be used for excluded files
+        "getStagedFileNumstat:package-lock.json": "1000\t1000\tpackage-lock.json",
+        "getStagedFileDiffWithContext:package-lock.json": "SECRET LOCKFILE CONTENT",
+        "getStagedFileDiff:package-lock.json": "SECRET REGULAR DIFF",
+    });
+
+      const context = builder.build("package-lock.json");
+
+      expect(context.fileContext).toContain("package-lock.json");
+      expect(context.fileContext).toContain("[excluded]");
+      expect(context.fileContext).toContain("[content excluded by config]");
+
+      expect(context.fileContext).not.toContain("SECRET LOCKFILE CONTENT");
+      expect(context.fileContext).not.toContain("SECRET REGULAR DIFF");
+    });
   });
 });
