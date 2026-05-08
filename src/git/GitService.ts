@@ -69,6 +69,57 @@ export class GitService {
     return this.runGitOrEmpty(["diff", "--numstat"]);
   }
 
+  getUnstagedNameStatus(): string {
+    return this.runGitOrEmpty(["diff", "--name-status"]);
+  }
+
+  getUntrackedFiles(): string[] {
+    const raw = this.runGitOrEmpty(["ls-files", "--others", "--exclude-standard"]);
+    return raw ? raw.split("\n").filter(Boolean) : [];
+  }
+
+  getFileDiffHunkHeaders(file: string, staged = false): string[] {
+    const args = staged
+      ? ["diff", "--cached", "-U0", "--", file]
+      : ["diff", "-U0", "--", file];
+
+    const raw = this.runGitOrEmpty(args);
+
+    return raw
+      .split("\n")
+      .filter((line) => line.startsWith("@@"))
+      .map((line) => {
+        const match = line.match(/@@.*@@\s*(.*)/);
+        return match?.[1]?.trim() ?? "";
+      })
+      .filter(Boolean)
+      .slice(0, 5);
+  }
+
+  getFileDiffKeyLines(file: string, staged = false): string[] {
+    const args = staged
+      ? ["diff", "--cached", "--", file]
+      : ["diff", "--", file];
+
+    const raw = this.runGitOrEmpty(args);
+
+    return raw
+      .split("\n")
+      .filter(
+        (line) =>
+          (line.startsWith("+") || line.startsWith("-")) &&
+          !line.startsWith("+++") &&
+          !line.startsWith("---"),
+      )
+      .map((line) => line.trim())
+      .filter((line) => line.length > 3)
+      .slice(0, 6);
+  }
+
+  resetStagedFiles(): void {
+    this.runGitWriteCommand(["reset", "HEAD", "--quiet"], "Failed to unstage files");
+  }
+
   getStagedFileDiff(file: string): string {
     return this.getStagedDiff(["--", file]);
   }

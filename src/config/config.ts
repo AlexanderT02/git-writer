@@ -48,6 +48,11 @@ export interface AppConfig {
     help: string;
   };
 
+  grouping: {
+    splitThreshold: number;
+    maxGroups: number;
+  };
+
   commit: {
     summaryMaxLength: number;
     reasoningDiffPreviewLines: number;
@@ -139,6 +144,12 @@ export const config: AppConfig = {
     loop: false,
     message: "Select files to stage",
     help: "↑/↓ move · Space select · Enter confirm",
+  },
+
+  // Auto-split grouping for fast mode with many files.
+  grouping: {
+    splitThreshold: 8,
+    maxGroups: 10,
   },
 
   // Commit message output constraints.
