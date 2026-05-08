@@ -28,6 +28,7 @@ export function createTestConfig(overrides: Partial<AppConfig> = {}): AppConfig 
       maxFileBufferBytes: 10 * 1024 * 1024,
       fastModeTokenLimit: 80_000,
       fastModeFileLimit: 50,
+      excludedContentPatterns: []
     },
     staging: {
       pageSize: 25,
