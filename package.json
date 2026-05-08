@@ -1,6 +1,5 @@
 {
   "name": "git-writer",
-  "version": "1.0.0",
   "bin": {
     "gw": "dist/index.js"
   },
