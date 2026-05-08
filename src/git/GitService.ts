@@ -108,12 +108,15 @@ export class GitService {
       .filter(
         (line) =>
           (line.startsWith("+") || line.startsWith("-")) &&
-          !line.startsWith("+++") &&
-          !line.startsWith("---"),
+        !line.startsWith("+++") &&
+        !line.startsWith("---"),
       )
       .map((line) => line.trim())
       .filter((line) => line.length > 3)
-      .slice(0, 6);
+      .filter((line) => !/^[+-]\s*[{}()[\],;]*$/.test(line))
+      .filter((line) => !/^[+-]\s*(import|export)\s/.test(line))
+      .filter((line) => !/^[+-]\s*\/\/\s*$/.test(line))
+      .slice(0, 10);
   }
 
   resetStagedFiles(): void {
