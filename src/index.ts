@@ -1,54 +1,34 @@
 #!/usr/bin/env node
 import { execFileSync } from "child_process";
 import chalk from "chalk";
+import { Command, InvalidArgumentError } from "commander";
+
 import { App } from "./core/App.js";
 import { UI } from "./ui/UI.js";
 import { GracefulExit } from "./errors.js";
 import { StatsRenderer } from "./stats/StatsRenderer.js";
 
-const args = process.argv.slice(2);
-
-const KNOWN_FLAGS = new Set(["-h", "--help", "-f", "--fast", "-b", "--base", "--reset"]);
-
-const hasFlag = (...flags: string[]): boolean =>
-  args.some((arg) => flags.includes(arg));
-
-const getOptionValue = (...names: string[]): string | undefined => {
-  const index = args.findIndex((arg) => names.includes(arg));
-
-  if (index < 0) return undefined;
-
-  const value = args[index + 1];
-
-  if (!value || value.startsWith("-")) {
-    console.warn(
-      chalk.yellow(`\n⚠ ${args[index]} requires a value (e.g. origin/main)\n`),
-    );
-    return undefined;
-  }
-
-  return value;
+type StatsOptions = {
+  reset?: boolean;
 };
 
-const normalizeCommand = (command?: string): "commit" | "pr" | "stats" | "help" => {
-  switch (command) {
-    case "commit":
-    case "c":
-      return "commit";
-
-    case "pr":
-    case "p":
-    case "pull-request":
-      return "pr";
-
-    case "stats":
-    case "s":
-      return "stats";
-
-    default:
-      return "help";
-  }
+type CommitOptions = {
+  fast?: boolean;
 };
+
+type PROptions = {
+  base?: string;
+};
+
+function assertGitInstalled(): void {
+  try {
+    execFileSync("git", ["--version"], {
+      stdio: ["ignore", "ignore", "ignore"],
+    });
+  } catch {
+    throw new GracefulExit(1, "Git is not installed or not available in PATH.");
+  }
+}
 
 function assertInsideGitRepo(): void {
   try {
@@ -63,86 +43,109 @@ function assertInsideGitRepo(): void {
   }
 }
 
-function assertGitInstalled(): void {
-  try {
-    execFileSync("git", ["--version"], {
-      stdio: ["ignore", "ignore", "ignore"],
-    });
-  } catch {
-    throw new GracefulExit(
-      1,
-      "Git is not installed or not available in PATH.",
-    );
-  }
-}
-
-function warnUnknownFlags(): void {
-  for (const arg of args) {
-    if (arg.startsWith("-") && !KNOWN_FLAGS.has(arg)) {
-      console.warn(chalk.yellow(`⚠ Unknown flag: ${arg}`));
-    }
-  }
-}
-
-function validateFlagCombinations(): void {
-  if (hasFlag("-f", "--fast") && normalizeCommand(args[0]) === "pr") {
-    console.warn(
-      chalk.yellow("⚠ --fast is only supported with the commit command\n"),
-    );
-  }
-
-  if (hasFlag("-b", "--base") && normalizeCommand(args[0]) === "commit") {
-    console.warn(
-      chalk.yellow("⚠ --base is only supported with the pr command\n"),
-    );
-  }
-}
-
-async function main(): Promise<void> {
-  if (hasFlag("-h", "--help")) {
-    UI.showHelp();
-    return;
-  }
-
-  const command = normalizeCommand(args[0]);
-
-  if (command === "help") {
-    console.log(chalk.yellow("\n⚠ No valid command provided."));
-    UI.showHelp();
-    return;
-  }
-
-  warnUnknownFlags();
-  validateFlagCombinations();
+function assertGitReady(): void {
   assertGitInstalled();
   assertInsideGitRepo();
-
-  const app = new App(hasFlag("-f", "--fast"));
-
-  if (command === "stats") {
-    const renderer = new StatsRenderer();
-
-    if (hasFlag("--reset")) {
-      renderer.renderReset();
-    }
-
-    const period = args.find((a) => !a.startsWith("-") && a !== "stats" && a !== "s");
-    renderer.render(period);
-    return;
-  }
-
-  if (command === "commit") {
-    await app.runCommitInteractive();
-    return;
-  }
-
-  if (command === "pr") {
-    await app.runPRInteractive(getOptionValue("-b", "--base"));
-    return;
-  }
 }
 
-main().catch((error: unknown) => {
+function validateGitRef(value: string): string {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    throw new InvalidArgumentError("Base branch cannot be empty.");
+  }
+
+  if (trimmed.startsWith("-")) {
+    throw new InvalidArgumentError("Base branch must be a valid git ref.");
+  }
+
+  return trimmed;
+}
+
+async function runCommit(options: CommitOptions): Promise<void> {
+  assertGitReady();
+
+  const app = new App(Boolean(options.fast));
+  await app.runCommitInteractive();
+}
+
+async function runPR(options: PROptions): Promise<void> {
+  assertGitReady();
+
+  const app = new App(false);
+  await app.runPRInteractive(options.base);
+}
+
+function runStats(period: string | undefined, options: StatsOptions): void {
+  assertGitReady();
+
+  const renderer = new StatsRenderer();
+
+  if (options.reset) {
+    renderer.renderReset();
+  }
+
+  renderer.render(period);
+}
+
+function createProgram(): Command {
+  const program = new Command();
+
+  program
+    .name("gw")
+    .description("AI-assisted Git commit, PR and repository stats helper")
+    .showHelpAfterError()
+    .showSuggestionAfterError()
+    .exitOverride();
+
+  program
+    .command("commit")
+    .alias("c")
+    .description("Generate and create an AI-assisted commit")
+    .option("-f, --fast", "Skip interactive refinement where possible")
+    .action(async (options: CommitOptions) => {
+      await runCommit(options);
+    });
+
+  program
+    .command("pr")
+    .aliases(["p", "pull-request"])
+    .description("Generate an AI-assisted pull request description")
+    .option(
+      "-b, --base <branch>",
+      "Base branch used to compare changes, e.g. origin/main",
+      validateGitRef,
+    )
+    .action(async (options: PROptions) => {
+      await runPR(options);
+    });
+
+  program
+    .command("stats")
+    .alias("s")
+    .description("Show git-writer usage statistics")
+    .argument("[period]", "Stats period, e.g. today, week, month or all")
+    .option("--reset", "Reset stored statistics before rendering")
+    .action((period: string | undefined, options: StatsOptions) => {
+      runStats(period, options);
+    });
+
+  program
+    .command("help", { hidden: true })
+    .action(() => {
+      UI.showHelp();
+    });
+
+  program.action(() => {
+    UI.showHelp();
+  });
+
+  return program;
+}
+
+const program = createProgram();
+
+program.parseAsync(process.argv).catch((error: unknown) => {
   if (error instanceof GracefulExit) {
     if (error.code !== 0 && error.message) {
       console.error(chalk.red(`\n✖ ${error.message}\n`));
