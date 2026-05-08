@@ -2,9 +2,7 @@
 import { execFileSync } from "child_process";
 import chalk from "chalk";
 import { Command, InvalidArgumentError } from "commander";
-
 import { App } from "./core/App.js";
-import { UI } from "./ui/UI.js";
 import { GracefulExit } from "./errors.js";
 import { StatsRenderer } from "./stats/StatsRenderer.js";
 
@@ -95,8 +93,7 @@ function createProgram(): Command {
     .name("gw")
     .description("AI-assisted Git commit, PR and repository stats helper")
     .showHelpAfterError()
-    .showSuggestionAfterError()
-    .exitOverride();
+    .showSuggestionAfterError();
 
   program
     .command("commit")
@@ -131,14 +128,10 @@ function createProgram(): Command {
     });
 
   program
-    .command("help", { hidden: true })
+    .command("h", { hidden: true })
     .action(() => {
-      UI.showHelp();
+      program.outputHelp();
     });
-
-  program.action(() => {
-    UI.showHelp();
-  });
 
   return program;
 }

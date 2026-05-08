@@ -8,7 +8,6 @@ import type {
   CommitStats,
   UiAction,
 } from "../types/types.js";
-import { GracefulExit } from "../errors.js";
 marked.setOptions({
   renderer: new TerminalRenderer(),
 });
@@ -151,58 +150,6 @@ export class UI {
         value: branch.branch,
       })),
     });
-  }
-
-  static showHelp(): never {
-    const command = chalk.cyan;
-    const option = chalk.yellow;
-    const dim = chalk.dim;
-    const heading = chalk.bold;
-    const appName = chalk.bold.blue;
-
-    console.log("");
-    console.log(appName("Git Writer") + dim(" (gw)"));
-    console.log(dim("Generate commit messages, PR descriptions, and usage stats."));
-    console.log("");
-
-    console.log(heading("Usage"));
-    console.log(`  ${command("gw")} ${dim("<command>")} ${dim("[options]")}`);
-    console.log("");
-
-    console.log(heading("Commands"));
-    console.log(`  ${command("commit")}, ${command("c")}              ${dim("Generate a commit message")}`);
-    console.log(`  ${command("pr")}, ${command("p")}                  ${dim("Generate a PR title and body")}`);
-    console.log(`  ${command("stats")}, ${command("s")}              ${dim("Show usage stats")}`);
-    console.log("");
-
-    console.log(heading("Commit options"));
-    console.log(`  ${option("-f")}, ${option("--fast")}             ${dim("Skip interactive prompts for commit generation")}`);
-    console.log("");
-
-    console.log(heading("PR options"));
-    console.log(`  ${option("-b")}, ${option("--base")} ${dim("<branch>")}   ${dim("Base branch for PR comparison")}`);
-    console.log("");
-
-    console.log(heading("Stats options"));
-    console.log(`  ${dim("[today|week|month]")}        ${dim("Stats time range; defaults to today")}`);
-    console.log(`  ${option("--reset")}               ${dim("Clear usage stats")}`);
-    console.log("");
-
-    console.log(heading("Global options"));
-    console.log(`  ${option("-h")}, ${option("--help")}             ${dim("Show this help message")}`);
-    console.log("");
-
-    console.log(heading("Examples"));
-    console.log(`  ${dim("$")} ${command("gw commit")}`);
-    console.log(`  ${dim("$")} ${command("gw c --fast")}`);
-    console.log(`  ${dim("$")} ${command("gw pr")}`);
-    console.log(`  ${dim("$")} ${command("gw p --base origin/develop")}`);
-    console.log(`  ${dim("$")} ${command("gw stats")}`);
-    console.log(`  ${dim("$")} ${command("gw s week")}`);
-    console.log(`  ${dim("$")} ${command("gw stats --reset")}`);
-    console.log("");
-
-    throw new GracefulExit(0);
   }
 
   static renderMarkdown(markdown: string): void {
