@@ -1,5 +1,3 @@
-import clipboard from "clipboardy";
-
 import type { LLMProviderConfig, LLMProviderName } from "../config/config.js";
 import { config } from "../config/config.js";
 import { CommitGenerator } from "../generation/CommitGenerator.js";
@@ -8,20 +6,17 @@ import { PRContextBuilder } from "../context/PRContextBuilder.js";
 import { GitService } from "../git/GitService.js";
 import { createLLMProvider } from "../llm/Factory.js";
 import { StagingService } from "../staging/StagingService.js";
-import { UI } from "../ui/UI.js";
 import type { LLM } from "../llm/LLM.js";
 import type { PRContext, UsageEntry } from "../types/types.js";
-import { PRGenerator } from "../generation/PRGenerator.js";
 import { GitPRService } from "../git/GitPRService.js";
 import { GitHubCLIService } from "../git/GitHubCliService.js";
-import {
-  estimateCommitTokens,
-  estimatePRTokens,
-} from "../llm/estimate/generationEstimate.js";
-import { GracefulExit, UserCancelledError } from "../errors.js";
 import { UsageTracker } from "../stats/UsageTracker.js";
 
-type GenerationUsage = {
+import { CommitFlow } from "./CommitFlow.js";
+import { FastCommitFlow } from "./FastCommitFlow.js";
+import { PRFlow } from "./PRFlow.js";
+
+export type GenerationUsage = {
   reasoning?: {
     inputTokens: number;
     outputTokens: number;
@@ -39,6 +34,20 @@ type GenerationUsage = {
   totalTokens: number;
 };
 
+export type UsageEntryBuilder = (
+  command: "commit" | "pr",
+  meta: {
+    files?: string;
+    diff: string;
+    usage: GenerationUsage;
+    usedTokens: number;
+    durationMs: number;
+    success: boolean;
+    fastMode: boolean;
+    errorCode?: string;
+  },
+) => UsageEntry;
+
 export class App {
   private readonly git: GitService;
   private readonly ai: LLM;
@@ -46,7 +55,6 @@ export class App {
   private readonly commitContext: CommitContextBuilder;
   private readonly prContext: PRContextBuilder;
   private readonly commitGenerator: CommitGenerator;
-  private issueRefs: string[] = [];
   private readonly providerName: LLMProviderName;
   private readonly llmConfig: LLMProviderConfig;
   private readonly fastMode: boolean;
@@ -54,13 +62,16 @@ export class App {
   private readonly githubCli: GitHubCLIService;
   private readonly tracker: UsageTracker;
 
+  private readonly commitFlow: CommitFlow;
+  private readonly fastCommitFlow: FastCommitFlow;
+  private readonly prFlow: PRFlow;
+
   constructor(
     fastMode = false,
     issueRefs: string[] = [],
     providerOverride?: LLMProviderName,
   ) {
     this.fastMode = fastMode;
-    this.issueRefs = issueRefs;
 
     this.providerName = providerOverride ?? config.llm.defaultProvider;
 
@@ -78,312 +89,55 @@ export class App {
     this.gitPR = new GitPRService(this.git, config);
     this.githubCli = new GitHubCLIService(this.git);
     this.tracker = new UsageTracker();
-  }
 
-  private appendIssueRefs(message: string): string {
-    if (!this.issueRefs.length) return message;
+    const buildUsageEntry: UsageEntryBuilder = this.buildUsageEntry.bind(this);
 
-    return `${message}\n\nrefs ${this.issueRefs.join(", ")}`;
+    this.commitFlow = new CommitFlow({
+      git: this.git,
+      staging: this.staging,
+      commitContext: this.commitContext,
+      commitGenerator: this.commitGenerator,
+      tracker: this.tracker,
+      buildUsageEntry,
+      issueRefs,
+    });
+
+    this.fastCommitFlow = new FastCommitFlow({
+      git: this.git,
+      ai: this.ai,
+      commitContext: this.commitContext,
+      commitGenerator: this.commitGenerator,
+      tracker: this.tracker,
+      buildUsageEntry,
+      issueRefs,
+      config,
+    });
+
+    this.prFlow = new PRFlow({
+      gitPR: this.gitPR,
+      githubCli: this.githubCli,
+      prContext: this.prContext,
+      ai: this.ai,
+      tracker: this.tracker,
+      buildUsageEntry,
+      config,
+    });
   }
 
   async runCommitInteractive(): Promise<void> {
     if (this.fastMode) {
-      return this.runCommitFast();
+      return this.fastCommitFlow.run();
     }
 
-    while (true) {
-      await this.staging.ensureStaged();
-
-      const files = this.git.getStagedFileNames();
-      const ctx = this.commitContext.build(files);
-
-      const startedAt = Date.now();
-
-      let generated = await this.commitGenerator.generate(files, ctx);
-      let message = generated.message;
-      let durationMs = Date.now() - startedAt;
-
-      while (true) {
-        UI.render(message, config);
-
-        const action = await UI.actionMenu(config);
-
-        if (action === "commit") {
-          this.commit(message, {
-            files,
-            diff: ctx._diff ?? "",
-            usedTokens: generated.usage.totalTokens,
-            usage: generated.usage,
-            durationMs,
-            fastMode: false,
-          });
-        }
-
-        if (action === "regen") {
-          this.commitGenerator.extraInstruction = "";
-
-          const regenStartedAt = Date.now();
-          generated = await this.commitGenerator.generate(files, ctx);
-          durationMs = Date.now() - regenStartedAt;
-          message = generated.message;
-
-          continue;
-        }
-
-        if (action === "refine") {
-          const text = await UI.refineInput(config);
-          this.commitGenerator.extraInstruction = text;
-
-          const refineStartedAt = Date.now();
-          generated = await this.commitGenerator.generate(files, ctx);
-          durationMs = Date.now() - refineStartedAt;
-          message = generated.message;
-
-          continue;
-        }
-
-        if (action === "edit") {
-          message = await UI.editMessage(message, config);
-          continue;
-        }
-
-        if (action === "copy") {
-          await clipboard.write(message);
-          UI.renderCopied();
-          continue;
-        }
-
-        UI.renderCancelled();
-        throw new UserCancelledError();
-      }
-    }
-  }
-
-  private async runCommitFast(): Promise<void> {
-    this.git.stageFiles(["."]);
-
-    const files = this.git.getStagedFileNames();
-
-    if (!files.trim()) {
-      UI.renderNothingToCommit();
-      throw new GracefulExit(0);
-    }
-
-    this.assertFastModeFileLimit(files);
-
-    const ctx = this.commitContext.build(files);
-
-    const estimatedTokens = estimateCommitTokens(
-      this.commitGenerator,
-      files,
-      ctx,
-    );
-
-    this.assertFastModeTokenLimit(estimatedTokens);
-
-    const startedAt = Date.now();
-    const generated = await this.commitGenerator.generate(files, ctx);
-    const durationMs = Date.now() - startedAt;
-
-    this.commit(generated.message, {
-      files,
-      diff: ctx._diff ?? "",
-      usedTokens: generated.usage.totalTokens,
-      usage: generated.usage,
-      durationMs,
-      fastMode: true,
-    });
-  }
-
-  private assertFastModeFileLimit(files: string): void {
-    const fileCount = files.split("\n").filter(Boolean).length;
-    const limit = config.context.fastModeFileLimit;
-
-    if (fileCount <= limit) return;
-
-    console.log(
-      `\n  ✖ Fast mode aborted: ${fileCount} staged files exceed the limit of ${limit}.\n`,
-    );
-    console.log("  → Use interactive mode to stage fewer files.\n");
-
-    throw new GracefulExit(1);
-  }
-
-  private assertFastModeTokenLimit(estimatedTokens: number): void {
-    const limit = config.context.fastModeTokenLimit;
-
-    if (estimatedTokens <= limit) return;
-
-    console.log(
-      `\n  ✖ Fast mode aborted: estimated ${estimatedTokens} tokens exceed the limit of ${limit}.\n`,
-    );
-    console.log("  → Use interactive mode or stage fewer/lighter changes.\n");
-
-    throw new GracefulExit(1);
-  }
-
-  private commit(
-    message: string,
-    meta: {
-      files: string;
-      diff: string;
-      usedTokens: number;
-      usage: GenerationUsage;
-      durationMs: number;
-      fastMode: boolean;
-    },
-  ): never {
-    const finalMessage = this.appendIssueRefs(message);
-
-    this.git.createCommit(finalMessage);
-
-    this.tracker.record(
-      this.buildUsageEntry("commit", {
-        files: meta.files,
-        diff: meta.diff,
-        usage: meta.usage,
-        usedTokens: meta.usedTokens,
-        durationMs: meta.durationMs,
-        fastMode: meta.fastMode,
-        success: true,
-      }),
-    );
-
-    UI.renderCommitCreated(this.git.getLastCommitStats());
-    throw new GracefulExit(0);
+    return this.commitFlow.run();
   }
 
   buildPRContext(baseBranch: string = "origin/main"): PRContext {
     return this.prContext.build(baseBranch);
   }
 
-  private renderPRFailure(result: {
-    message: string;
-    suggestedCommand?: string;
-  }): never {
-    console.log(`\n  ✖ ${result.message}`);
-
-    if (result.suggestedCommand) {
-      console.log(`  → ${result.suggestedCommand}`);
-    }
-
-    console.log("");
-    throw new GracefulExit(1);
-  }
-
   async runPRInteractive(baseBranch?: string): Promise<void> {
-    const baseSummaries = this.gitPR.getAvailablePRBaseSummaries();
-
-    if (!baseBranch && !baseSummaries.length) {
-      console.log(
-        "\n  ✖ No remote base branches found. Run git fetch --all --prune or pass a base branch directly, e.g. gw p origin/main\n",
-      );
-      throw new GracefulExit(1);
-    }
-
-    const selectedBaseBranch =
-      baseBranch ??
-      (await UI.selectBranch(baseSummaries, "Select base branch for PR:"));
-
-    const preflightError = this.githubCli.getPreflightError(selectedBaseBranch);
-
-    if (preflightError) {
-      switch (preflightError.status) {
-        case "already_exists":
-          if (preflightError.url) {
-            UI.renderPRCreated(preflightError.url);
-          } else {
-            console.log("\n  ✔ Pull request already exists.\n");
-          }
-
-          throw new GracefulExit(0);
-
-        case "not_pushed":
-        case "unpushed_commits":
-        case "gh_unauthenticated":
-        case "gh_missing":
-        case "failed":
-          this.renderPRFailure(preflightError);
-          return;
-
-        case "created":
-          UI.renderPRCreated(preflightError.url);
-          throw new GracefulExit(0);
-      }
-    }
-
-    if (!this.gitPR.hasPRChangesAgainst(selectedBaseBranch)) {
-      console.log(
-        `\n  ✖ No PR changes found against ${selectedBaseBranch}.\n`,
-      );
-      throw new GracefulExit(1);
-    }
-
-    const prContext = this.buildPRContext(selectedBaseBranch);
-    const prGenerator = new PRGenerator(this.ai, config);
-
-    this.renderLargePRTokenEstimate(prGenerator, prContext);
-
-    const startedAt = Date.now();
-    const generatedPR = await prGenerator.generate(prContext);
-    const durationMs = Date.now() - startedAt;
-
-    const { title, description } = generatedPR;
-
-    this.tracker.record(
-      this.buildUsageEntry("pr", {
-        diff: prContext.diff,
-        usage: generatedPR.usage,
-        usedTokens: generatedPR.usage.totalTokens,
-        durationMs,
-        fastMode: false,
-        success: true,
-      }),
-    );
-    while (true) {
-      UI.renderPRPreview(selectedBaseBranch, title, description);
-
-      const action = await UI.prActionMenu();
-
-      if (action === "copy") {
-        await clipboard.write(`${title}\n\n${description}`);
-        UI.renderCopied("Copied PR to clipboard");
-        throw new GracefulExit(0);
-      }
-
-      if (action === "create") {
-        const result = this.githubCli.createPullRequestFromCurrentBranch(
-          selectedBaseBranch,
-          title,
-          description,
-        );
-
-        switch (result.status) {
-          case "created":
-            UI.renderPRCreated(result.url);
-            throw new GracefulExit(0);
-
-          case "already_exists":
-            if (result.url) {
-              UI.renderPRCreated(result.url);
-            } else {
-              console.log("\n  ✔ Pull request already exists.\n");
-            }
-
-            throw new GracefulExit(0);
-
-          case "not_pushed":
-          case "unpushed_commits":
-          case "gh_unauthenticated":
-          case "gh_missing":
-          case "failed":
-            this.renderPRFailure(result);
-        }
-      }
-
-      UI.renderCancelled();
-      throw new UserCancelledError();
-    }
+    return this.prFlow.run(baseBranch);
   }
 
   private buildUsageEntry(
@@ -412,8 +166,14 @@ export class App {
       llmCalls,
 
       usedTokens: meta.usedTokens,
-      inputTokens: llmCalls.reduce((sum, call) => sum + call.tokens.inputTokens, 0),
-      outputTokens: llmCalls.reduce((sum, call) => sum + call.tokens.outputTokens, 0),
+      inputTokens: llmCalls.reduce(
+        (sum, call) => sum + call.tokens.inputTokens,
+        0,
+      ),
+      outputTokens: llmCalls.reduce(
+        (sum, call) => sum + call.tokens.outputTokens,
+        0,
+      ),
       reasoningTokens: this.sumOptionalTokenField(llmCalls, "reasoningTokens"),
       cachedTokens: this.sumOptionalTokenField(llmCalls, "cachedTokens"),
 
@@ -465,18 +225,6 @@ export class App {
     }
 
     return { additions, deletions };
-  }
-
-  private renderLargePRTokenEstimate(
-    prGenerator: PRGenerator,
-    prContext: PRContext,
-  ): void {
-    const estimatedTokens = estimatePRTokens(prGenerator, prContext);
-    const warningThreshold = config.context.fastModeTokenLimit * 3;
-
-    if (estimatedTokens <= warningThreshold) return;
-
-    UI.renderTokenEstimate(estimatedTokens, "Large PR token estimate");
   }
 
   private buildLLMCalls(usage: GenerationUsage): UsageEntry["llmCalls"] {
