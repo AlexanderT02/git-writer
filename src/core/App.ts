@@ -144,12 +144,12 @@ export class App {
 
   async runCommitInteractive(): Promise<void> {
     if (this.fastMode) {
-      return this.fastCommitFlow.run();
+      await this.fastCommitFlow.run({ exitOnComplete: true });
+      return;
     }
 
-    return this.commitFlow.run();
+    await this.commitFlow.run();
   }
-
   buildPRContext(baseBranch: string = "origin/main"): PRContext {
     return this.prContext.build(baseBranch);
   }

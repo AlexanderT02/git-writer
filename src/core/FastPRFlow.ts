@@ -15,6 +15,11 @@ import type { UsageEntryBuilder } from "./App.js";
 import type { FastCommitFlow } from "./FastCommitFlow.js";
 import type { PRFlow } from "./PRFlow.js";
 
+type PushConfirmationAction =
+  | "push"
+  | "cancel"
+  | "undo_commits";
+
 export class FastPRFlow {
   constructor(
     private readonly deps: {
@@ -47,14 +52,39 @@ export class FastPRFlow {
 
     this.validatePR(selectedBaseBranch);
 
-    await this.deps.fastCommitFlow.run();
+    const headBeforeFastCommit = this.deps.git.getCurrentHeadSha();
 
+    const commitResult = await this.deps.fastCommitFlow.run({
+      exitOnComplete: false,
+    });
+
+    if (commitResult.status === "nothing_to_commit") {
+      throw new GracefulExit(0);
+    }
+
+    const createdCommits =
+      this.deps.git.getCommitSummariesSince(headBeforeFastCommit);
+
+    if (!createdCommits.length) {
+      console.log("\n  ✖ Fast commit completed, but no created commits were found.\n");
+      throw new GracefulExit(1);
+    }
+
+    UI.renderCreatedCommitSummary(createdCommits);
     if (!force) {
-      const confirmed = await this.confirmPush();
+      const action = await this.confirmPush();
 
-      if (!confirmed) {
-        UI.renderCancelled();
-        throw new UserCancelledError();
+      switch (action) {
+        case "push":
+          break;
+
+        case "undo_commits":
+          this.discardCreatedCommitsKeepFilesStaged(headBeforeFastCommit);
+          throw new GracefulExit(0);
+
+        case "cancel":
+          UI.renderCancelled();
+          throw new UserCancelledError();
       }
     }
 
@@ -73,7 +103,10 @@ export class FastPRFlow {
     if (readinessError) {
       console.log(`\n  ✖ ${readinessError.message}`);
 
-      if ("suggestedCommand" in readinessError && readinessError.suggestedCommand) {
+      if (
+        "suggestedCommand" in readinessError &&
+        readinessError.suggestedCommand
+      ) {
         console.log(`  → ${readinessError.suggestedCommand}`);
       }
 
@@ -81,7 +114,8 @@ export class FastPRFlow {
       throw new GracefulExit(1);
     }
 
-    const existingUrl = this.deps.githubCli.getExistingPullRequestUrl(baseBranch);
+    const existingUrl =
+      this.deps.githubCli.getExistingPullRequestUrl(baseBranch);
 
     if (existingUrl) {
       UI.renderPRCreated(existingUrl);
@@ -90,14 +124,39 @@ export class FastPRFlow {
     }
   }
 
-  private async confirmPush(): Promise<boolean> {
-    return select<boolean>({
-      message: "Push commit and continue to PR?",
+  private async confirmPush(
+  ): Promise<PushConfirmationAction> {
+    return select<PushConfirmationAction>({
+      message: "Push commit(s) and continue to PR?",
       choices: [
-        { name: "Confirm — push and create PR", value: true },
-        { name: "Cancel", value: false },
+        {
+          name: "Confirm — push and create PR",
+          value: "push",
+        },
+        {
+          name: "Undo commits and keep files staged",
+          value: "undo_commits",
+        },
+        {
+          name: "Cancel",
+          value: "cancel",
+        },
       ],
     });
+  }
+
+  private discardCreatedCommitsKeepFilesStaged(targetSha: string): void {
+    try {
+      this.deps.git.resetSoftTo(targetSha);
+
+      console.log(
+        chalk.green("\n  ✔ Discarded created commit(s) and kept files staged\n"),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(`\n  ✖ Failed to discard created commit(s): ${message}\n`);
+      throw new GracefulExit(1);
+    }
   }
 
   private push(): void {
@@ -165,6 +224,7 @@ export class FastPRFlow {
         } else {
           console.log("\n  ✔ Pull request already exists.\n");
         }
+
         throw new GracefulExit(0);
 
       default:
