@@ -269,19 +269,19 @@ describe("CLI commands", () => {
       expect(mockRunPRInteractive).toHaveBeenCalledWith("origin/main");
     });
 
-    it("runs pr --auto in fast PR mode with confirmations", async () => {
+    it("runs pr --safe in fast PR mode with confirmations", async () => {
       const { App } = await import("../src/core/App.js");
 
-      await runCommand(["pr", "--auto"]);
+      await runCommand(["pr", "--safe"]);
 
       expect(App).toHaveBeenCalledWith(true, [], "openai", false);
       expect(mockRunPRInteractive).toHaveBeenCalledWith(undefined);
     });
 
-    it("runs pr -a in fast PR mode with confirmations", async () => {
+    it("runs pr -s in fast PR mode with confirmations", async () => {
       const { App } = await import("../src/core/App.js");
 
-      await runCommand(["pr", "-a"]);
+      await runCommand(["pr", "-s"]);
 
       expect(App).toHaveBeenCalledWith(true, [], "openai", false);
       expect(mockRunPRInteractive).toHaveBeenCalledWith(undefined);
@@ -314,10 +314,10 @@ describe("CLI commands", () => {
       expect(mockRunPRInteractive).toHaveBeenCalledWith("origin/develop");
     });
 
-    it("treats --force as stronger than --auto", async () => {
+    it("treats --force as stronger than --safe", async () => {
       const { App } = await import("../src/core/App.js");
 
-      await runCommand(["pr", "--auto", "--force"]);
+      await runCommand(["pr", "--safe", "--force"]);
 
       expect(App).toHaveBeenCalledWith(true, [], "openai", true);
       expect(mockRunPRInteractive).toHaveBeenCalledWith(undefined);
@@ -469,12 +469,12 @@ describe("CLI commands", () => {
       expect(output).toContain("multiple logical commits");
     });
 
-    it("shows auto and force options in pr help", async () => {
+    it("shows safe and force options in pr help", async () => {
       const output = await getCommandHelp("pr");
       const normalizedOutput = output.replace(/\s+/g, " ");
 
       expect(normalizedOutput).toContain(
-        "-a, --auto Auto mode: commit, push, and create PR with confirmations",
+        "-s, --safe Commit locally, then confirm before pushing and creating the PR",
       );
       expect(normalizedOutput).toContain(
         "-f, --force Force mode: commit, push, and create PR without confirmations",
