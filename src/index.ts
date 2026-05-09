@@ -23,7 +23,7 @@ type CommitOptions = {
 
 type PROptions = {
   base?: string;
-  auto?: boolean;
+  safe?: boolean;
   force?: boolean;
 };
 
@@ -106,7 +106,7 @@ async function runPR(options: PROptions): Promise<void> {
   assertGitReady();
 
   const provider = new ProviderSettings().getCurrentProvider();
-  const isAuto = Boolean(options.auto) || Boolean(options.force);
+  const isAuto = Boolean(options.safe) || Boolean(options.force);
   const isForce = Boolean(options.force);
   const app = new App(isAuto, [], provider, isForce);
 
@@ -165,7 +165,10 @@ export function createProgram(): Command {
       "Base branch used to compare changes, e.g. origin/main",
       validateGitRef,
     )
-    .option("-a, --auto", "Auto mode: commit, push, and create PR with confirmations")
+    .option(
+      "-s, --safe",
+      "Commit locally, then confirm before pushing and creating the PR",
+    )
     .option("-f, --force", "Force mode: commit, push, and create PR without confirmations")
     .action(async (options: PROptions) => {
       await runPR(options);
