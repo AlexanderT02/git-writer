@@ -1,9 +1,8 @@
 {
-  "name": "git-worker",
+  "name": "git-writer",
   "version": "0.2.7",
   "description": "CLI to generate conventional commit messages and pull request descriptions from your Git changes using LLMs.",
   "bin": {
-    "git-worker": "dist/index.js",
     "git-writer": "dist/index.js",
     "gw": "dist/index.js"
   },
