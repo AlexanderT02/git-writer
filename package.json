@@ -1,6 +1,10 @@
 {
-  "name": "git-writer",
+  "name": "git-worker",
+  "version": "0.2.7",
+  "description": "CLI to generate conventional commit messages and pull request descriptions from your Git changes using LLMs.",
   "bin": {
+    "git-worker": "dist/index.js",
+    "git-writer": "dist/index.js",
     "gw": "dist/index.js"
   },
   "type": "module",
@@ -33,13 +37,15 @@
     "check": "npm run lint && npm run build",
     "start": "node dist/index.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepack": "npm run clean && npm run check && npm test",
+    "release:patch": "npm version patch && git push --follow-tags",
+    "release:minor": "npm version minor && git push --follow-tags",
+    "release:major": "npm version major && git push --follow-tags"
   },
   "files": [
     "dist",
-    "README.md"
-  ],
-  "engines": {
-    "node": ">=22"
-  }
+    "README.md",
+    "LICENSE"
+  ]
 }
