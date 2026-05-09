@@ -11,6 +11,7 @@ import { StatsRenderer } from "./stats/StatsRenderer.js";
 import { ProviderSettings } from "./llm/ProviderSettings.js";
 import type { LLMProviderName } from "./config/config.js";
 import { realpathSync } from "fs";
+import { createRequire } from "module";
 
 type StatsOptions = {
   reset?: boolean;
@@ -125,11 +126,20 @@ function runStats(period: string | undefined, options: StatsOptions): void {
 }
 
 export function createProgram(): Command {
+  const require = createRequire(import.meta.url);
+
+  const packageJson = require("../package.json") as {
+    version?: string;
+  };
+
+  const VERSION = packageJson.version ?? "0.0.0";
   const program = new Command();
 
   program
-    .name("gw")
+    .name("git-writer")
+    .alias("gw")
     .description("AI-assisted Git commit, PR and repository stats helper")
+    .version(VERSION, "-v, --version", "Show the current version")
     .showHelpAfterError()
     .showSuggestionAfterError();
 
