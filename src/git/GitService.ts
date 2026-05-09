@@ -1,7 +1,11 @@
 import { execFileSync, spawnSync } from "child_process";
 import chalk from "chalk";
 import type { AppConfig } from "../config/config.js";
-import type { BranchContext, CommitStats } from "../types/types.js";
+import type {
+  BranchContext,
+  CommitStats,
+  CreatedCommitSummary,
+} from "../types/types.js";
 
 type GitOptions = {
   trim?: boolean;
@@ -285,5 +289,65 @@ export class GitService {
     if (result.status !== 0) {
       throw new Error(result.stderr || fallbackError);
     }
+  }
+  
+  getCommitSummariesSince(baseSha: string): CreatedCommitSummary[] {
+    const output = this.runGitOrEmpty([
+      "log",
+      "--reverse",
+      "--pretty=format:%H%x09%s",
+      `${baseSha}..HEAD`,
+    ]);
+
+    if (!output.trim()) return [];
+
+    return output
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const [sha = "", title = ""] = line.split("\t");
+
+        return {
+          sha,
+          title,
+          stats: this.getCommitStatsByRef(sha),
+        };
+      });
+  }
+
+  getCurrentHeadSha(): string {
+    try {
+      return this.runGit(["rev-parse", "HEAD"]).trim();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to read current HEAD: ${message}`);
+    }
+  }
+
+  resetSoftTo(ref: string): void {
+    this.runGitWriteCommand(["reset", "--soft", ref], "Failed to reset commits");
+  }
+
+  private getCommitStatsByRef(ref: string): {
+    files: number;
+    insertions: number;
+    deletions: number;
+  } {
+    const output = this.runGitOrEmpty([
+      "show",
+      "--shortstat",
+      "--format=",
+      ref,
+    ]);
+
+    const filesMatch = output.match(/(\d+) files? changed/);
+    const insertionsMatch = output.match(/(\d+) insertions?\(\+\)/);
+    const deletionsMatch = output.match(/(\d+) deletions?\(-\)/);
+
+    return {
+      files: filesMatch ? Number(filesMatch[1]) : 0,
+      insertions: insertionsMatch ? Number(insertionsMatch[1]) : 0,
+      deletions: deletionsMatch ? Number(deletionsMatch[1]) : 0,
+    };
   }
 }
