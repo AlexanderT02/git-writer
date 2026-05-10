@@ -4,12 +4,12 @@ Git Writer is a small CLI that turns local Git changes into useful text.
 
 It can generate:
 
-- [Conventional Commit](https://www.conventionalcommits.org/) messages from staged or selected files
+- [Conventional Commit](https://www.conventionalcommits.org/) messages from interactively selected or already staged files
 - Pull request titles and Markdown descriptions from branch diffs
 - GitHub pull requests when the GitHub CLI is installed and authenticated
 - Local usage statistics for generated output
 
-Git Writer uses OpenAI by default, but the LLM provider is configurable. You can switch to Ollama or add another provider.
+Git Writer uses OpenAI by default, but the LLM provider is configurable. You can switch to Ollama, Gemini, or add another provider.
 
 Use `gw --help` for the full command reference.
 
@@ -27,9 +27,11 @@ Use `gw --help` for the full command reference.
 
 - Node.js `>= 22`
 - Git
-- OpenAI API key, Ollama, or another configured LLM provider
-- GitHub CLI for creating pull requests from `gw pr`
-
+- One configured LLM provider:
+  - OpenAI with an API key
+  - Gemini with an API key
+  - Ollama running locally with the configured model installed
+- GitHub CLI if you want to create pull requests from `gw pr`
 ---
 
 ## Install
@@ -72,60 +74,111 @@ gw --help
 
 ## Commit workflow
 
-`gw commit` starts the interactive commit flow. The short alias is `gw c`.
-
-It lets you select files, stages them, analyzes the staged diff, and generates a Conventional Commit message.
+`gw commit` (`gw c`) helps you create focused commits without blindly staging everything.
 
 ```bash
 gw commit
 gw c
 ```
 
-You can then commit, edit, regenerate, refine, copy, or cancel the generated message.
+What happens:
 
-Issue references can be passed directly:
+1. Select the files you want to commit.
+2. Git Writer stages the selection.
+3. It generates a Conventional Commit message.
+4. You choose whether to commit, edit, regenerate, refine, copy, or cancel.
+
+You can pass issue refs directly:
 
 ```bash
 gw commit 123
 gw c 42 99
 ```
 
-Git Writer can also infer issue references from branch names such as `feature/123-login` or `fix/456-auth-error`.
+Git Writer can also infer refs from branch names like `feature/123-login` or `fix/456-auth-error`.
 
-### Fast commit mode
+### Safety hints
 
-Fast mode skips all interaction and generates the commit message directly.
+Git Writer warns when selected changes may create surprising commits, for example:
 
-```bash
-gw commit --fast
-gw c -f
-```
+- a file is already partially staged and selecting it would stage additional unstaged changes
+- the selected context is large and may produce a less precise message
+
+These hints appear before the commit message is generated.
 
 ---
 
 ## Pull request workflow
 
-`gw pr` starts the pull request flow. The short alias is `gw p`.
-
-It compares the current branch against a base branch and generates a PR title plus Markdown body.
+`gw pr` (`gw p`) generates a PR title and Markdown body from your branch diff.
 
 ```bash
 gw pr
 gw p
 ```
 
-By default, Git Writer compares against `origin/main`.
-
-Use another base branch:
+You can pass a base branch:
 
 ```bash
 gw pr --base origin/main
 gw p -b develop
 ```
 
-The PR text is based on the current branch, issue reference, commits ahead of the base branch, diff stats, changed files, and relevant file context.
+Without a base branch, Git Writer lets you choose from available remote base branches.
 
-If the GitHub CLI is installed and authenticated, Git Writer can also create the pull request for you.
+The PR flow uses your branch commits, changed files, diff stats, and relevant file context to create a concise PR preview.
+
+### Unpushed branch warning
+
+If your branch has no upstream or contains unpushed commits, Git Writer warns you first.
+
+You can:
+
+- push now
+- continue to preview without pushing
+- cancel
+
+Copying the generated PR text does not require GitHub CLI checks. GitHub CLI checks only run when you choose to create the PR.
+
+### PR actions
+
+After generation, you can:
+
+- copy the PR text
+- create the PR via GitHub CLI
+- cancel
+
+---
+
+## Stats
+
+Git Writer records local usage stats for generated commit and PR output.
+
+```bash
+gw stats
+gw s
+```
+
+Available periods:
+
+```bash
+gw stats today
+gw stats week
+gw stats month
+gw stats all
+```
+
+Reset stats:
+
+```bash
+gw stats --reset
+```
+
+Stats are stored locally:
+
+```txt
+.git/git-writer/usage.jsonl
+```
 
 ---
 
@@ -230,6 +283,8 @@ Useful scripts:
 ## Privacy
 
 Git Writer sends selected Git context to the configured LLM provider.
+
+For commits, this is based on the staged diff. For pull requests, this is based on the branch diff against the selected base branch.
 
 Before using external providers, review what you are about to send:
 

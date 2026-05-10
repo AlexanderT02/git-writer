@@ -8,7 +8,7 @@ import type { GitHubCLIService } from "../git/GitHubCliService.js";
 import type { GitPRService } from "../git/GitPRService.js";
 import type { LLM } from "../llm/LLM.js";
 import type { UsageTracker } from "../stats/UsageTracker.js";
-import type { PRContext } from "../types/types.js";
+import type { PRContext, PullRequestCreateResult } from "../types/types.js";
 import { UI } from "../ui/UI.js";
 import type { UsageEntryBuilder } from "./App.js";
 
@@ -30,9 +30,9 @@ export class PRFlow {
   }
 
   async run(baseBranch?: string): Promise<void> {
-    const baseSummaries = this.deps.gitPR.getAvailablePRBaseSummaries();
+    const initialBaseSummaries = this.deps.gitPR.getAvailablePRBaseSummaries();
 
-    if (!baseBranch && !baseSummaries.length) {
+    if (!baseBranch && !initialBaseSummaries.length) {
       console.log(
         "\n  ✖ No remote base branches found. Run git fetch --all --prune or pass a base branch directly, e.g. gw p origin/main\n",
       );
@@ -41,37 +41,13 @@ export class PRFlow {
 
     await this.handleUnpushedCommitsWarning();
 
+    const baseSummaries = baseBranch
+      ? initialBaseSummaries
+      : this.deps.gitPR.getAvailablePRBaseSummaries();
+
     const selectedBaseBranch =
       baseBranch ??
       (await UI.selectBranch(baseSummaries, "Select base branch for PR:"));
-
-    const preflightError =
-      this.deps.githubCli.getPreflightError(selectedBaseBranch);
-
-    if (preflightError) {
-      switch (preflightError.status) {
-        case "already_exists":
-          if (preflightError.url) {
-            UI.renderPRCreated(preflightError.url);
-          } else {
-            UI.renderPullRequestAlreadyExists();
-          }
-
-          throw new GracefulExit(0);
-
-        case "not_pushed":
-        case "unpushed_commits":
-        case "gh_unauthenticated":
-        case "gh_missing":
-        case "failed":
-          this.renderPRFailure(preflightError);
-          return;
-
-        case "created":
-          UI.renderPRCreated(preflightError.url);
-          throw new GracefulExit(0);
-      }
-    }
 
     if (!this.deps.gitPR.hasPRChangesAgainst(selectedBaseBranch)) {
       UI.renderNoPRChanges(selectedBaseBranch);
@@ -110,6 +86,8 @@ export class PRFlow {
       }
 
       if (action === "create") {
+        this.ensureGitHubPRCanBeCreated(selectedBaseBranch);
+
         const result =
           this.deps.githubCli.createPullRequestFromCurrentBranch(
             selectedBaseBranch,
@@ -117,27 +95,7 @@ export class PRFlow {
             description,
           );
 
-        switch (result.status) {
-          case "created":
-            UI.renderPRCreated(result.url);
-            throw new GracefulExit(0);
-
-          case "already_exists":
-            if (result.url) {
-              UI.renderPRCreated(result.url);
-            } else {
-              UI.renderPullRequestAlreadyExists();
-            }
-
-            throw new GracefulExit(0);
-
-          case "not_pushed":
-          case "unpushed_commits":
-          case "gh_unauthenticated":
-          case "gh_missing":
-          case "failed":
-            this.renderPRFailure(result);
-        }
+        this.handleCreatePRResult(result);
       }
 
       if (action === "cancel") {
@@ -169,6 +127,69 @@ export class PRFlow {
 
     UI.renderCancelled();
     throw new UserCancelledError();
+  }
+
+  private ensureGitHubPRCanBeCreated(selectedBaseBranch: string): void {
+    const preflightError =
+      this.deps.githubCli.getPreflightError(selectedBaseBranch);
+
+    if (!preflightError) return;
+
+    switch (preflightError.status) {
+      case "already_exists":
+        if (preflightError.url) {
+          UI.renderPRCreated(preflightError.url);
+        } else {
+          UI.renderPullRequestAlreadyExists();
+        }
+
+        throw new GracefulExit(0);
+
+      case "created":
+        UI.renderPRCreated(preflightError.url);
+        throw new GracefulExit(0);
+
+      case "not_pushed":
+      case "unpushed_commits":
+      case "gh_unauthenticated":
+      case "gh_missing":
+      case "failed":
+        this.renderPRFailure(preflightError);
+    }
+  }
+
+  private handleCreatePRResult(result: PullRequestCreateResult): never {
+    switch (result.status) {
+      case "created":
+        if (!result.url) {
+          this.renderPRFailure({
+            message: "Pull request was created, but no URL was returned.",
+          });
+        }
+
+        UI.renderPRCreated(result.url);
+        throw new GracefulExit(0);
+
+      case "already_exists":
+        if (result.url) {
+          UI.renderPRCreated(result.url);
+        } else {
+          UI.renderPullRequestAlreadyExists();
+        }
+
+        throw new GracefulExit(0);
+
+      case "not_pushed":
+      case "unpushed_commits":
+      case "gh_unauthenticated":
+      case "gh_missing":
+      case "failed":
+        this.renderPRFailure({
+          message: result.message ?? "Failed to create pull request.",
+          suggestedCommand:
+          "suggestedCommand" in result ? result.suggestedCommand : undefined,
+        });
+    }
   }
 
   private renderPRFailure(result: {
