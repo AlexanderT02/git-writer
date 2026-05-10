@@ -14,7 +14,6 @@ marked.setOptions({
 });
 
 export class UI {
-
   static createCommitMessageLiveRenderer(config: AppConfig): {
     render: (message: string) => void;
     end: (message?: string) => void;

@@ -4,7 +4,6 @@ import type { AppConfig } from "../config/config.js";
 import type {
   BranchContext,
   CommitStats,
-  CreatedCommitSummary,
 } from "../types/types.js";
 
 type GitOptions = {
