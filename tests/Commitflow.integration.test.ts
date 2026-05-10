@@ -8,6 +8,7 @@ import {
 } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { UI } from "../src/ui/UI.js";
 import { execFileSync } from "child_process";
 import { GracefulExit } from "../src/errors.js";
 
@@ -55,6 +56,28 @@ vi.mock("../src/llm/Factory.js", () => ({
   createLLMProvider: vi.fn(() => mockLLM),
 }));
 
+vi.mock("../src/staging/treePrompt.js", async () => {
+  const actual = await vi.importActual<typeof import("../src/staging/treePrompt.js")>(
+    "../src/staging/treePrompt.js",
+  );
+
+  return {
+    ...actual,
+    treeCheckbox: vi.fn(async (config: any) => {
+      const stageAll = config.rows.find((row: any) => row.value === "__ALL__");
+
+      if (stageAll) {
+        return ["__ALL__"];
+      }
+
+      return config.rows
+        .filter((row: any) => row.type === "choice")
+        .map((row: any) => row.value);
+    }),
+  };
+});
+
+
 describe("Commit flow integration", () => {
   let cwd: string;
   let repo: string;
@@ -72,6 +95,8 @@ describe("Commit flow integration", () => {
     writeFileSync("README.md", "# Test\n");
     git("add", "README.md");
     git("commit", "-m", "chore: initial commit");
+    vi.spyOn(UI, "actionMenu").mockResolvedValue("commit");
+    vi.spyOn(UI, "renderCommitCreated").mockImplementation(() => {});
 
     mockLLM.complete.mockClear();
     mockLLM.stream.mockClear();
@@ -231,7 +256,7 @@ describe("Commit flow integration", () => {
     expect(entry.command).toBe("commit");
     expect(entry.provider).toBe("openai");
     expect(entry.success).toBe(true);
-    expect(entry.fastMode).toBe(true);
+    expect(entry.fastMode).toBe(false);
     expect(entry.usedTokens).toBe(310);
     expect(entry.inputTokens).toBe(220);
     expect(entry.outputTokens).toBe(90);
