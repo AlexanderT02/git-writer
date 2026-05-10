@@ -13,9 +13,7 @@ import { GitHubCLIService } from "../git/GitHubCliService.js";
 import { UsageTracker } from "../stats/UsageTracker.js";
 
 import { CommitFlow } from "./CommitFlow.js";
-import { FastCommitFlow } from "./FastCommitFlow.js";
 import { PRFlow } from "./PRFlow.js";
-import { FastPRFlow } from "./FastPRFlow.js";
 
 export type GenerationUsage = {
   reasoning?: {
@@ -63,11 +61,8 @@ export class App {
   private readonly gitPR: GitPRService;
   private readonly githubCli: GitHubCLIService;
   private readonly tracker: UsageTracker;
-
   private readonly commitFlow: CommitFlow;
-  private readonly fastCommitFlow: FastCommitFlow;
   private readonly prFlow: PRFlow;
-  private readonly fastPRFlow: FastPRFlow;
 
   constructor(
     fastMode = false,
@@ -107,17 +102,6 @@ export class App {
       issueRefs,
     });
 
-    this.fastCommitFlow = new FastCommitFlow({
-      git: this.git,
-      ai: this.ai,
-      commitContext: this.commitContext,
-      commitGenerator: this.commitGenerator,
-      tracker: this.tracker,
-      buildUsageEntry,
-      issueRefs,
-      config,
-    });
-
     this.prFlow = new PRFlow({
       gitPR: this.gitPR,
       githubCli: this.githubCli,
@@ -127,27 +111,9 @@ export class App {
       buildUsageEntry,
       config,
     });
-
-    this.fastPRFlow = new FastPRFlow({
-      fastCommitFlow: this.fastCommitFlow,
-      prFlow: this.prFlow,
-      git: this.git,
-      ai: this.ai,
-      gitPR: this.gitPR,
-      githubCli: this.githubCli,
-      prContext: this.prContext,
-      tracker: this.tracker,
-      buildUsageEntry,
-      config,
-    });
   }
 
   async runCommitInteractive(): Promise<void> {
-    if (this.fastMode) {
-      await this.fastCommitFlow.run({ exitOnComplete: true });
-      return;
-    }
-
     await this.commitFlow.run();
   }
   buildPRContext(baseBranch: string = "origin/main"): PRContext {
@@ -155,10 +121,6 @@ export class App {
   }
 
   async runPRInteractive(baseBranch?: string): Promise<void> {
-    if (this.fastMode || this.forceMode) {
-      return this.fastPRFlow.run(baseBranch, this.forceMode);
-    }
-
     return this.prFlow.run(baseBranch);
   }
 
