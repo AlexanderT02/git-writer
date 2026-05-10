@@ -13,6 +13,38 @@ import type { UsageTracker } from "../stats/UsageTracker.js";
 import { estimateCommitTokens } from "../llm/estimate/generationEstimate.js";
 import type { UsageEntryBuilder } from "./App.js";
 
+export type FastCommitResult =
+  | { status: "committed"; commitCount: number }
+  | { status: "nothing_to_commit" };
+
+type FastCommitRunOptions = {
+  exitOnComplete?: boolean;
+};
+
+type UsageMeta = {
+  files: string;
+  diff: string;
+  usedTokens: number;
+  usage: {
+    reasoning?: {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+      reasoningTokens?: number;
+      cachedTokens?: number;
+    };
+    generation?: {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+      reasoningTokens?: number;
+      cachedTokens?: number;
+    };
+    totalTokens: number;
+  };
+  durationMs: number;
+};
+
 export class FastCommitFlow {
   constructor(
     private readonly deps: {
@@ -27,27 +59,38 @@ export class FastCommitFlow {
     },
   ) {}
 
-  async run(): Promise<void> {
+  async run(options: FastCommitRunOptions = {}): Promise<FastCommitResult> {
+    const exitOnComplete = options.exitOnComplete ?? true;
+
     this.deps.git.stageFiles(["."]);
 
     const files = this.deps.git.getStagedFileNames();
 
     if (!files.trim()) {
       UI.renderNothingToCommit();
-      throw new GracefulExit(0);
+
+      if (exitOnComplete) {
+        throw new GracefulExit(0);
+      }
+
+      return { status: "nothing_to_commit" };
     }
 
     const fileCount = files.split("\n").filter(Boolean).length;
     const shouldSplit = fileCount >= this.deps.config.grouping.splitThreshold;
 
-    if (!shouldSplit) {
-      return this.runSingle(files);
+    const result = shouldSplit
+      ? await this.runSplit()
+      : await this.runSingle(files);
+
+    if (exitOnComplete) {
+      throw new GracefulExit(0);
     }
 
-    return this.runSplit();
+    return result;
   }
 
-  private async runSingle(files: string): Promise<void> {
+  private async runSingle(files: string): Promise<FastCommitResult> {
     this.assertFileLimit(files);
 
     const ctx = this.deps.commitContext.build(files);
@@ -71,9 +114,11 @@ export class FastCommitFlow {
       usage: generated.usage,
       durationMs,
     });
+
+    return { status: "committed", commitCount: 1 };
   }
 
-  private async runSplit(): Promise<void> {
+  private async runSplit(): Promise<FastCommitResult> {
     this.deps.git.resetStagedFiles();
 
     const grouper = new ChangeGrouper(
@@ -81,11 +126,12 @@ export class FastCommitFlow {
       this.deps.ai,
       this.deps.config,
     );
+
     const summaries = grouper.collectSummaries();
 
     if (summaries.length === 0) {
       UI.renderNothingToCommit();
-      throw new GracefulExit(0);
+      return { status: "nothing_to_commit" };
     }
 
     console.log(
@@ -124,20 +170,13 @@ export class FastCommitFlow {
       const generated = await this.deps.commitGenerator.generate(files, ctx);
       const durationMs = Date.now() - startedAt;
 
-      const finalMessage = this.appendIssueRefs(generated.message);
-      this.deps.git.createCommit(finalMessage);
-
-      this.deps.tracker.record(
-        this.deps.buildUsageEntry("commit", {
-          files,
-          diff: ctx._diff ?? "",
-          usage: generated.usage,
-          usedTokens: generated.usage.totalTokens,
-          durationMs,
-          fastMode: true,
-          success: true,
-        }),
-      );
+      this.commit(generated.message, {
+        files,
+        diff: ctx._diff ?? "",
+        usage: generated.usage,
+        usedTokens: generated.usage.totalTokens,
+        durationMs,
+      });
 
       const stats = this.deps.git.getLastCommitStats();
       const statsStr = stats
@@ -163,7 +202,7 @@ export class FastCommitFlow {
       ),
     );
 
-    throw new GracefulExit(0);
+    return { status: "committed", commitCount };
   }
 
   private appendIssueRefs(message: string): string {
@@ -172,32 +211,7 @@ export class FastCommitFlow {
     return `${message}\n\nrefs ${this.deps.issueRefs.join(", ")}`;
   }
 
-  private commit(
-    message: string,
-    meta: {
-      files: string;
-      diff: string;
-      usedTokens: number;
-      usage: {
-        reasoning?: {
-          inputTokens: number;
-          outputTokens: number;
-          totalTokens: number;
-          reasoningTokens?: number;
-          cachedTokens?: number;
-        };
-        generation?: {
-          inputTokens: number;
-          outputTokens: number;
-          totalTokens: number;
-          reasoningTokens?: number;
-          cachedTokens?: number;
-        };
-        totalTokens: number;
-      };
-      durationMs: number;
-    },
-  ): never {
+  private commit(message: string, meta: UsageMeta): void {
     const finalMessage = this.appendIssueRefs(message);
 
     this.deps.git.createCommit(finalMessage);
@@ -215,7 +229,6 @@ export class FastCommitFlow {
     );
 
     UI.renderCommitCreated(this.deps.git.getLastCommitStats());
-    throw new GracefulExit(0);
   }
 
   private renderGroupingSummary(groups: FileGroup[]): void {

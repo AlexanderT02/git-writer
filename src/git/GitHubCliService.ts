@@ -175,6 +175,7 @@ export class GitHubCLIService {
 
     if (result.status === 0) {
       return {
+        message: "Pull request created successfully.",
         status: "created",
         url: result.stdout,
       };

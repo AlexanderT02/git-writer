@@ -15,6 +15,7 @@ import { UsageTracker } from "../stats/UsageTracker.js";
 import { CommitFlow } from "./CommitFlow.js";
 import { FastCommitFlow } from "./FastCommitFlow.js";
 import { PRFlow } from "./PRFlow.js";
+import { FastPRFlow } from "./FastPRFlow.js";
 
 export type GenerationUsage = {
   reasoning?: {
@@ -58,6 +59,7 @@ export class App {
   private readonly providerName: LLMProviderName;
   private readonly llmConfig: LLMProviderConfig;
   private readonly fastMode: boolean;
+  private readonly forceMode: boolean;
   private readonly gitPR: GitPRService;
   private readonly githubCli: GitHubCLIService;
   private readonly tracker: UsageTracker;
@@ -65,13 +67,16 @@ export class App {
   private readonly commitFlow: CommitFlow;
   private readonly fastCommitFlow: FastCommitFlow;
   private readonly prFlow: PRFlow;
+  private readonly fastPRFlow: FastPRFlow;
 
   constructor(
     fastMode = false,
     issueRefs: string[] = [],
     providerOverride?: LLMProviderName,
+    forceMode = false,
   ) {
     this.fastMode = fastMode;
+    this.forceMode = forceMode;
 
     this.providerName = providerOverride ?? config.llm.defaultProvider;
 
@@ -122,21 +127,38 @@ export class App {
       buildUsageEntry,
       config,
     });
+
+    this.fastPRFlow = new FastPRFlow({
+      fastCommitFlow: this.fastCommitFlow,
+      prFlow: this.prFlow,
+      git: this.git,
+      ai: this.ai,
+      gitPR: this.gitPR,
+      githubCli: this.githubCli,
+      prContext: this.prContext,
+      tracker: this.tracker,
+      buildUsageEntry,
+      config,
+    });
   }
 
   async runCommitInteractive(): Promise<void> {
     if (this.fastMode) {
-      return this.fastCommitFlow.run();
+      await this.fastCommitFlow.run({ exitOnComplete: true });
+      return;
     }
 
-    return this.commitFlow.run();
+    await this.commitFlow.run();
   }
-
   buildPRContext(baseBranch: string = "origin/main"): PRContext {
     return this.prContext.build(baseBranch);
   }
 
   async runPRInteractive(baseBranch?: string): Promise<void> {
+    if (this.fastMode || this.forceMode) {
+      return this.fastPRFlow.run(baseBranch, this.forceMode);
+    }
+
     return this.prFlow.run(baseBranch);
   }
 

@@ -103,6 +103,7 @@ export type PullRequestCreateResult =
   | {
     status: "created";
     url: string;
+    message: string;
   }
   | {
     status: "already_exists";
@@ -199,3 +200,15 @@ export interface UsageEntry {
 
   fastMode?: boolean;
 }
+
+export type CreatedCommitStats = {
+  files: number;
+  insertions: number;
+  deletions: number;
+};
+
+export type CreatedCommitSummary = {
+  sha: string;
+  title: string;
+  stats: CreatedCommitStats;
+};

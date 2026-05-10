@@ -11,17 +11,20 @@ import { StatsRenderer } from "./stats/StatsRenderer.js";
 import { ProviderSettings } from "./llm/ProviderSettings.js";
 import type { LLMProviderName } from "./config/config.js";
 import { realpathSync } from "fs";
+import { createRequire } from "module";
 
 type StatsOptions = {
   reset?: boolean;
 };
 
 type CommitOptions = {
-  fast?: boolean;
+  force?: boolean;
 };
 
 type PROptions = {
   base?: string;
+  safe?: boolean;
+  force?: boolean;
 };
 
 function assertGitInstalled(): void {
@@ -94,7 +97,7 @@ async function runCommit(
   assertGitReady();
 
   const provider = new ProviderSettings().getCurrentProvider();
-  const app = new App(Boolean(options.fast), normalizeIssues(issues), provider);
+  const app = new App(Boolean(options.force), normalizeIssues(issues), provider);
 
   await app.runCommitInteractive();
 }
@@ -103,7 +106,9 @@ async function runPR(options: PROptions): Promise<void> {
   assertGitReady();
 
   const provider = new ProviderSettings().getCurrentProvider();
-  const app = new App(false, [], provider);
+  const isAuto = Boolean(options.safe) || Boolean(options.force);
+  const isForce = Boolean(options.force);
+  const app = new App(isAuto, [], provider, isForce);
 
   await app.runPRInteractive(options.base);
 }
@@ -121,11 +126,20 @@ function runStats(period: string | undefined, options: StatsOptions): void {
 }
 
 export function createProgram(): Command {
+  const require = createRequire(import.meta.url);
+
+  const packageJson = require("../package.json") as {
+    version?: string;
+  };
+
+  const VERSION = packageJson.version ?? "0.0.0";
   const program = new Command();
 
   program
-    .name("gw")
+    .name("git-writer")
+    .alias("gw")
     .description("AI-assisted Git commit, PR and repository stats helper")
+    .version(VERSION, "-v, --version", "Show the current version")
     .showHelpAfterError()
     .showSuggestionAfterError();
 
@@ -134,7 +148,10 @@ export function createProgram(): Command {
     .alias("c")
     .description("Generate and create an AI-assisted commit")
     .argument("[issues...]", "Issue references, e.g. 123 456")
-    .option("-f, --fast", "Skip interactive refinement where possible")
+    .option(
+      "-f, --force",
+      "Skip the interactive menu and commit directly; large changes may be split into multiple logical commits",
+    )
     .action(async (issues: string[], options: CommitOptions) => {
       await runCommit(issues, options);
     });
@@ -148,6 +165,11 @@ export function createProgram(): Command {
       "Base branch used to compare changes, e.g. origin/main",
       validateGitRef,
     )
+    .option(
+      "-s, --safe",
+      "Commit locally, then confirm before pushing and creating the PR",
+    )
+    .option("-f, --force", "Force mode: commit, push, and create PR without confirmations")
     .action(async (options: PROptions) => {
       await runPR(options);
     });
