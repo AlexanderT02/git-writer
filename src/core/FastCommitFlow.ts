@@ -1,15 +1,15 @@
 import chalk from "chalk";
 
 import type { AppConfig } from "../config/config.js";
+import type { CommitContextBuilder } from "../context/CommitContextBuilder.js";
+import { GracefulExit } from "../errors.js";
 import type { CommitGenerator } from "../generation/CommitGenerator.js";
 import { ChangeGrouper } from "../generation/ChangeGrouper.js";
-import type { CommitContextBuilder } from "../context/CommitContextBuilder.js";
 import type { GitService } from "../git/GitService.js";
 import type { LLM } from "../llm/LLM.js";
+import type { UsageTracker } from "../stats/UsageTracker.js";
 import type { CommitStats, FileGroup } from "../types/types.js";
 import { UI } from "../ui/UI.js";
-import { GracefulExit } from "../errors.js";
-import type { UsageTracker } from "../stats/UsageTracker.js";
 import type { UsageEntryBuilder } from "./App.js";
 
 export type FastCommitResult =
@@ -92,7 +92,9 @@ export class FastCommitFlow {
   private async runSingle(files: string): Promise<FastCommitResult> {
     const ctx = this.deps.commitContext.build(files);
     const startedAt = Date.now();
+
     const generated = await this.deps.commitGenerator.generate(files, ctx);
+
     const durationMs = Date.now() - startedAt;
 
     const stats = this.commit(generated.message, {
@@ -105,9 +107,7 @@ export class FastCommitFlow {
 
     UI.renderCommitCreated(stats);
 
-    console.log(
-      chalk.green.bold(`\n  ✔ Done ${this.formatStats(stats)}\n`),
-    );
+    console.log(chalk.green.bold(`\n✔ Done ${this.formatStats(stats)}\n`));
 
     return { status: "committed", commitCount: 1 };
   }
@@ -128,9 +128,7 @@ export class FastCommitFlow {
       return { status: "nothing_to_commit" };
     }
 
-    console.log(
-      chalk.cyan(`\n  Grouping ${summaries.length} changed files...\n`),
-    );
+    console.log(chalk.cyan(`\nGrouping ${summaries.length} changed files...\n`));
 
     const { groups } = await grouper.group(summaries);
 
@@ -151,7 +149,7 @@ export class FastCommitFlow {
 
       if (!files.trim()) {
         console.log(
-          chalk.yellow(`  ⚠ Skipped ${group.label}: no stageable files`),
+          chalk.yellow(`⚠ Skipped ${group.label}: no stageable files`),
         );
         continue;
       }
@@ -159,15 +157,17 @@ export class FastCommitFlow {
       this.renderSkippedGroupFiles(group, failedFiles);
 
       const ctx = this.deps.commitContext.build(files);
-
       const startedAt = Date.now();
-      const generated = await this.deps.commitGenerator.generate(files, ctx, { render: false });
-      const durationMs = Date.now() - startedAt;
 
+      const generated = await this.deps.commitGenerator.generate(files, ctx, {
+        render: false,
+      });
+
+      const durationMs = Date.now() - startedAt;
       const subject = generated.message.split("\n")[0] ?? group.label;
 
       console.log(
-        chalk.dim(`\n  Commit ${i + 1}/${groups.length}: `) +
+        chalk.dim(`\nCommit ${i + 1}/${groups.length}: `) +
           chalk.white(subject),
       );
 
@@ -188,7 +188,7 @@ export class FastCommitFlow {
 
     console.log(
       chalk.green.bold(
-        `\n  ✔ Done — ${commitCount} commit${
+        `\n✔ Done — ${commitCount} commit${
           commitCount !== 1 ? "s" : ""
         } created ${this.formatStats(totalStats)}\n`,
       ),
@@ -224,23 +224,34 @@ export class FastCommitFlow {
   }
 
   private renderGroupingSummary(groups: FileGroup[]): void {
-    console.log(chalk.bold(`  ${groups.length} groups:\n`));
+    console.log(chalk.bold(`${groups.length} groups:\n`));
 
     for (let i = 0; i < groups.length; i++) {
       const group = groups[i]!;
 
       console.log(
-        chalk.cyan(`  ${i + 1}. ${group.conventionalType}`) +
+        chalk.cyan(`${i + 1}. ${group.conventionalType}`) +
           chalk.white(`: ${group.label}`) +
-          chalk.dim(
-            ` — ${group.files.length} file${
-              group.files.length !== 1 ? "s" : ""
-            }`,
-          ),
+          chalk.dim(` — ${this.formatFileCount(group.files.length)}`),
       );
     }
 
     console.log("");
+  }
+
+  private renderSkippedGroupFiles(
+    group: FileGroup,
+    failedFiles: string[],
+  ): void {
+    if (failedFiles.length === 0) return;
+
+    console.log(
+      chalk.yellow(
+        `⚠ Skipped ${this.formatFileCount(
+          failedFiles.length,
+        )} in ${group.label}: not stageable`,
+      ),
+    );
   }
 
   private formatStats(stats?: CommitStats | null): string {
@@ -253,6 +264,10 @@ export class FastCommitFlow {
     );
   }
 
+  private formatFileCount(count: number): string {
+    return `${count} file${count !== 1 ? "s" : ""}`;
+  }
+
   private addStats(
     total: CommitStats,
     stats?: CommitStats | null,
@@ -261,8 +276,10 @@ export class FastCommitFlow {
 
     return {
       files: String(this.toNumber(total.files) + this.toNumber(stats.files)),
-      insertions: this.toNumber(total.insertions) + this.toNumber(stats.insertions),
-      deletions: this.toNumber(total.deletions) + this.toNumber(stats.deletions),
+      insertions:
+        this.toNumber(total.insertions) + this.toNumber(stats.insertions),
+      deletions:
+        this.toNumber(total.deletions) + this.toNumber(stats.deletions),
     };
   }
 
@@ -286,17 +303,5 @@ export class FastCommitFlow {
     }
 
     return failedFiles;
-  }
-
-  private renderSkippedGroupFiles(group: FileGroup, failedFiles: string[]): void {
-    if (failedFiles.length === 0) return;
-
-    console.log(
-      chalk.yellow(
-        `  ⚠ Skipped ${failedFiles.length} file${
-          failedFiles.length !== 1 ? "s" : ""
-        } in ${group.label}: not stageable`,
-      ),
-    );
   }
 }
