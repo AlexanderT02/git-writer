@@ -366,7 +366,7 @@ ${sections}`;
 
     const reasoningPrompt = this.buildReasoningPrompt(files, context);
 
-    const spinner = render ? ora("Analysing intent...").start() : undefined;
+    const spinner = ora("Analysing intent...").start();
 
     let reasoningResult: Awaited<ReturnType<typeof this.ai.complete>>;
 
@@ -375,7 +375,7 @@ ${sections}`;
         this.ai.complete(reasoningPrompt),
       );
     } finally {
-      spinner?.stop();
+      spinner.stop();
     }
 
     const reasoning = reasoningResult.text;
@@ -383,48 +383,59 @@ ${sections}`;
 
     const messagePrompt = this.buildMessagePrompt(files, context, reasoning);
 
-    const streamSpinner = render
-      ? ora("Generating commit message...").start()
-      : undefined;
+    const streamSpinner = ora("Generating commit message...").start();
 
-    const renderer = render
-      ? UI.createCommitMessageLiveRenderer(this.config)
-      : undefined;
-
+    let result: Awaited<ReturnType<typeof this.ai.complete | typeof this.ai.stream>>;
     let streamedText = "";
-    let result: Awaited<ReturnType<typeof this.ai.stream>>;
 
     try {
-      result = await this.withRetry(() =>
-        this.ai.stream(messagePrompt, (text) => {
-          streamSpinner?.stop();
+      if (render) {
+        const renderer = UI.createCommitMessageLiveRenderer(this.config);
 
-          if (!text.trim()) return;
+        result = await this.withRetry(() =>
+          this.ai.stream(messagePrompt, (text) => {
+            streamSpinner.stop();
 
-          if (text.startsWith(streamedText)) {
-          // Provider sends full snapshot.
-            streamedText = text;
-          } else {
-          // Provider sends delta.
-            streamedText += text;
-          }
+            if (!text.trim()) return;
 
-          if (!renderer) return;
+            if (text.startsWith(streamedText)) {
+              // Provider sends full snapshot.
+              streamedText = text;
+            } else {
+              // Provider sends delta.
+              streamedText += text;
+            }
 
-          const sanitized = this.sanitizeCommitMessage(streamedText);
+            const sanitized = this.sanitizeCommitMessage(streamedText);
 
-          if (sanitized.trim()) {
-            renderer.render(sanitized);
-          }
-        }),
-      );
+            if (sanitized.trim()) {
+              renderer.render(sanitized);
+            }
+          }),
+        );
+
+        const message = this.sanitizeCommitMessage(result.text || streamedText);
+
+        renderer.end(message);
+
+        return {
+          message,
+          usage: {
+            reasoning: reasoningUsage,
+            generation: result.usage,
+            totalTokens:
+              (reasoningUsage?.totalTokens ?? 0) +
+              (result.usage?.totalTokens ?? 0),
+          },
+        };
+      }
+
+      result = await this.withRetry(() => this.ai.complete(messagePrompt));
     } finally {
-      streamSpinner?.stop();
+      streamSpinner.stop();
     }
 
     const message = this.sanitizeCommitMessage(result.text || streamedText);
-
-    renderer?.end(message);
 
     return {
       message,
@@ -432,8 +443,8 @@ ${sections}`;
         reasoning: reasoningUsage,
         generation: result.usage,
         totalTokens:
-        (reasoningUsage?.totalTokens ?? 0) +
-        (result.usage?.totalTokens ?? 0),
+          (reasoningUsage?.totalTokens ?? 0) +
+          (result.usage?.totalTokens ?? 0),
       },
     };
   }
