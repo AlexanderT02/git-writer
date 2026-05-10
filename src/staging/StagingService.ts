@@ -1,15 +1,15 @@
 import { readFileSync, statSync } from "fs";
-import chalk from "chalk";
+
 import type { AppConfig } from "../config/config.js";
-import type { DiffStats, StatusEntry } from "../types/types.js";
+import { GracefulExit } from "../errors.js";
 import type { GitService } from "../git/GitService.js";
+import type { DiffStats, StatusEntry } from "../types/types.js";
+import { UI } from "../ui/UI.js";
 import {
   buildTreeRows,
-  formatStatusSummary,
   normalizePath,
   treeCheckbox,
 } from "./treePrompt.js";
-import { GracefulExit } from "../errors.js";
 
 export class StagingService {
   constructor(
@@ -132,7 +132,10 @@ export class StagingService {
     ];
   }
 
-  private expandStageFiles(files: StatusEntry[], selectedFiles: string[]): string[] {
+  private expandStageFiles(
+    files: StatusEntry[],
+    selectedFiles: string[],
+  ): string[] {
     const selectedSet = new Set(selectedFiles.map(normalizePath));
     const stageFiles = new Set<string>();
 
@@ -230,33 +233,16 @@ export class StagingService {
     }
   }
 
-  printSummary(files: StatusEntry[], stagedExists: boolean): void {
-    const total = files.length;
-
-    console.log("");
-    console.log(
-      chalk.bold("  Stage changes") +
-        chalk.dim(`  ${total} file${total !== 1 ? "s" : ""} `) +
-        formatStatusSummary(files),
-    );
-
-    if (stagedExists) {
-      console.log(chalk.dim.italic("  ↳ staged changes already present"));
-    }
-
-    console.log("");
-  }
-
   async ensureStaged(): Promise<void> {
     const staged = this.git.getStagedFileNames().trim();
     const files = this.parseStatusDetailed();
 
     if (!files.length && !staged) {
-      console.log(chalk.gray("\n  ✔ Working tree clean\n"));
+      UI.renderWorkingTreeClean();
       throw new GracefulExit(0);
     }
 
-    this.printSummary(files, Boolean(staged));
+    UI.renderStagingSummary(files, Boolean(staged));
 
     const diffStats = this.getDiffStats(files);
     const choices = buildTreeRows(files, Boolean(staged), diffStats);
@@ -267,40 +253,122 @@ export class StagingService {
       rows: choices,
       pageSize: this.config.staging.pageSize,
       loop: this.config.staging.loop,
+      getWarnings: (selectedFiles) =>
+        this.getSelectionWarnings(selectedFiles, diffStats),
     });
-
     if (selected.includes("__SKIP__")) {
-      console.log(chalk.green("\n  ✔ Using already staged files\n"));
+      UI.renderUsingAlreadyStagedFiles();
       return;
     }
 
     if (selected.includes("__ALL__")) {
-      this.git.stageFiles(this.expandStageFiles(files, files.map((file) => file.file)));
-
-      console.log(
-        chalk.green(
-          `\n  ✔ Staged all ${files.length} file${
-            files.length !== 1 ? "s" : ""
-          }\n`,
+      this.git.stageFiles(
+        this.expandStageFiles(
+          files,
+          files.map((file) => file.file),
         ),
       );
 
+      UI.renderStagedAllFiles(files.length);
       return;
     }
 
     if (!selected.length) {
-      console.log(chalk.red("\n  ✖ Nothing selected — aborting\n"));
+      UI.renderNothingSelected();
       throw new GracefulExit(0);
     }
 
+    this.warnIfSelectedFilesArePartiallyStaged(selected);
+
     this.git.stageFiles(this.expandStageFiles(files, selected));
 
-    console.log(
-      chalk.green(
-        `\n  ✔ Staged ${selected.length} file${
-          selected.length !== 1 ? "s" : ""
-        }\n`,
-      ),
+    UI.renderStagedSelectedFiles(selected.length);
+  }
+
+  private getPartiallyStagedSelectedFiles(selectedFiles: string[]): string[] {
+    const selectedSet = new Set(selectedFiles.map(normalizePath));
+    const status = this.git.getWorkingTreeStatus();
+
+    if (!status) return [];
+
+    const partialFiles: string[] = [];
+
+    for (const line of status.split("\n").filter(Boolean)) {
+      if (line.length < 4) continue;
+
+      const indexStatus = line[0];
+      const worktreeStatus = line[1];
+      const rest = line.slice(3).trim();
+
+      const file = normalizePath(
+        rest.includes(" -> ")
+          ? rest.split(" -> ").pop()?.trim() ?? rest
+          : rest,
+      );
+
+      const hasStagedChange = indexStatus !== " " && indexStatus !== "?";
+      const hasUnstagedChange = worktreeStatus !== " ";
+
+      if (selectedSet.has(file) && hasStagedChange && hasUnstagedChange) {
+        partialFiles.push(file);
+      }
+    }
+
+    return partialFiles;
+  }
+
+  private warnIfSelectedFilesArePartiallyStaged(selectedFiles: string[]): void {
+    const partialFiles = this.getPartiallyStagedSelectedFiles(selectedFiles);
+
+    if (!partialFiles.length) return;
+
+    UI.renderPartiallyStagedSelectionWarning(partialFiles);
+  }
+
+  private getSelectionWarnings(
+    selectedFiles: string[],
+    diffStats: Map<string, DiffStats>,
+  ): string[] {
+    const realFiles = selectedFiles.filter(
+      (file) => file !== "__ALL__" && file !== "__SKIP__",
     );
+
+    const warnings: string[] = [];
+
+    let additions = 0;
+    let deletions = 0;
+
+    for (const file of realFiles) {
+      const stats = diffStats.get(normalizePath(file));
+
+      if (!stats) continue;
+
+      additions += stats.add;
+      deletions += stats.del;
+    }
+
+    const changedLines = additions + deletions;
+
+    if (realFiles.length >= 20) {
+      warnings.push(
+        `${realFiles.length} files selected. This is a large commit; consider splitting it.`,
+      );
+    } else if (realFiles.length >= 10) {
+      warnings.push(
+        `${realFiles.length} files selected. Check if these changes belong in one commit.`,
+      );
+    }
+
+    if (changedLines >= 1000) {
+      warnings.push(
+        `${changedLines} changed lines selected. This is a very large context; the generated message may be less precise.`,
+      );
+    } else if (changedLines >= 400) {
+      warnings.push(
+        `${changedLines} changed lines selected. Consider selecting fewer files for a more precise message.`,
+      );
+    }
+
+    return warnings;
   }
 }

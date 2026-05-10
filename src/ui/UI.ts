@@ -7,8 +7,10 @@ import TerminalRenderer from "marked-terminal";
 import type {
   BranchPRSummary,
   CommitStats,
+  StatusEntry,
   UiAction,
 } from "../types/types.js";
+import { formatStatusSummary } from "../staging/treePrompt.js";
 marked.setOptions({
   renderer: new TerminalRenderer(),
 });
@@ -245,5 +247,79 @@ export class UI {
       console.log(chalk.cyan(url));
       console.log("");
     }
+  }
+
+  static renderStagingSummary(
+    files: StatusEntry[],
+    stagedExists: boolean,
+  ): void {
+    const total = files.length;
+
+    console.log("");
+    console.log(
+      chalk.bold("  Stage changes") +
+        chalk.dim(`  ${total} file${total !== 1 ? "s" : ""} `) +
+        formatStatusSummary(files),
+    );
+
+    if (stagedExists) {
+      console.log(chalk.dim.italic("  ↳ staged changes already present"));
+    }
+
+    console.log("");
+  }
+
+  static renderWorkingTreeClean(): void {
+    console.log(chalk.gray("\n  ✔ Working tree clean\n"));
+  }
+
+  static renderUsingAlreadyStagedFiles(): void {
+    console.log(chalk.green("\n  ✔ Using already staged files\n"));
+  }
+
+  static renderStagedAllFiles(fileCount: number): void {
+    console.log(
+      chalk.green(
+        `\n  ✔ Staged all ${fileCount} file${fileCount !== 1 ? "s" : ""}\n`,
+      ),
+    );
+  }
+
+  static renderStagedSelectedFiles(fileCount: number): void {
+    console.log(
+      chalk.green(
+        `\n  ✔ Staged ${fileCount} file${fileCount !== 1 ? "s" : ""}\n`,
+      ),
+    );
+  }
+
+  static renderNothingSelected(): void {
+    console.log(chalk.red("\n  ✖ Nothing selected — aborting\n"));
+  }
+
+  static renderPartiallyStagedSelectionWarning(files: string[]): void {
+    console.log("");
+    console.log(chalk.yellow.bold("  ⚠ Partially staged files selected"));
+    console.log(
+      chalk.dim(
+        "  These files already have staged changes and also contain unstaged changes.",
+      ),
+    );
+    console.log(
+      chalk.dim(
+        "  Staging them now will include the remaining unstaged changes too.",
+      ),
+    );
+    console.log("");
+
+    for (const file of files.slice(0, 10)) {
+      console.log(`  ${chalk.yellow("•")} ${file}`);
+    }
+
+    if (files.length > 10) {
+      console.log(chalk.dim(`  … ${files.length - 10} more`));
+    }
+
+    console.log("");
   }
 }

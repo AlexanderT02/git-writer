@@ -135,6 +135,7 @@ interface TreeCheckboxConfig {
   rows: TreeRow[];
   pageSize: number;
   loop: boolean;
+  getWarnings?: (selected: string[]) => string[];
 }
 
 const getFirstSelectableIndex = (rows: TreeRow[]): number =>
@@ -245,7 +246,18 @@ export const treeCheckbox = createPrompt<string[], TreeCheckboxConfig>(
       ? chalk.dim(` ${selected.size} selected`)
       : "";
 
-    return `${prefix} ${message}${selectedCount}${help}\n${page}`;
+    const warnings =
+      status === "idle" && config.getWarnings
+        ? config.getWarnings([...selected])
+        : [];
+
+    const warningText = warnings.length
+      ? "\n" +
+      warnings.map((warning) => chalk.yellow(`  ⚠ ${warning}`)).join("\n") +
+      "\n"
+      : "";
+
+    return `${prefix} ${message}${selectedCount}${help}${warningText}\n${page}`;
   },
 );
 
