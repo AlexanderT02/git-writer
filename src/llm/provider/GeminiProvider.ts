@@ -1,6 +1,7 @@
 import type { LLMProviderConfig } from "../../config/config.js";
-import type { LLM } from "../LLM.js";
+import { BaseLLMProvider } from "../LLM.js";
 import type { LLMResult, LLMUsage } from "../../types/types.js";
+import { LLMProviderError } from "../../errors.js";
 
 type GeminiPart = {
   text?: string;
@@ -30,21 +31,29 @@ type GeminiGenerateResponse = {
   };
 };
 
-export class GeminiProvider implements LLM {
+export class GeminiProvider extends BaseLLMProvider {
+  protected readonly provider = "gemini";
+
   private readonly apiKey: string;
   private readonly baseUrl = "https://generativelanguage.googleapis.com/v1beta";
 
   constructor(private readonly config: LLMProviderConfig) {
+    super();
+
     const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
 
     if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is not set");
+      throw new LLMProviderError(
+        "gemini",
+        "missing_api_key",
+        "gemini: missing GEMINI_API_KEY or GOOGLE_API_KEY",
+      );
     }
 
     this.apiKey = apiKey;
   }
 
-  async complete(prompt: string): Promise<LLMResult> {
+  protected async doComplete(prompt: string): Promise<LLMResult> {
     const response = await fetch(
       `${this.baseUrl}/models/${this.config.reasoningModel}:generateContent`,
       {
@@ -60,7 +69,7 @@ export class GeminiProvider implements LLM {
     const json = (await response.json()) as GeminiGenerateResponse;
 
     if (!response.ok || json.error) {
-      throw new Error(this.formatError(json, response.status));
+      throw this.toGeminiError(json, response.status);
     }
 
     return {
@@ -69,7 +78,7 @@ export class GeminiProvider implements LLM {
     };
   }
 
-  async stream(
+  protected async doStream(
     prompt: string,
     onText: (text: string) => void,
   ): Promise<LLMResult> {
@@ -88,8 +97,9 @@ export class GeminiProvider implements LLM {
     if (!response.ok) {
       const errorText = await response.text();
 
-      throw new Error(
-        `Gemini API error ${response.status}: ${errorText}`,
+      throw Object.assign(
+        new Error(`Gemini API error ${response.status}: ${errorText}`),
+        { status: response.status },
       );
     }
 
@@ -124,14 +134,14 @@ export class GeminiProvider implements LLM {
         const chunk = JSON.parse(data) as GeminiGenerateResponse;
 
         if (chunk.error) {
-          throw new Error(this.formatError(chunk));
+          throw this.toGeminiError(chunk);
         }
 
         const delta = this.extractText(chunk);
 
         if (delta.length > 0) {
           fullText += delta;
-          onText(fullText);
+          onText(delta);
         }
 
         if (chunk.usageMetadata) {
@@ -198,14 +208,17 @@ export class GeminiProvider implements LLM {
     };
   }
 
-  private formatError(
+  private toGeminiError(
     response: GeminiGenerateResponse,
     fallbackStatus?: number,
-  ): string {
-    const code = response.error?.code ?? fallbackStatus ?? "unknown";
-    const status = response.error?.status ?? "UNKNOWN";
+  ): Error {
+    const status = response.error?.code ?? fallbackStatus;
+    const label = response.error?.status ?? "UNKNOWN";
     const message = response.error?.message ?? "Unknown Gemini API error";
 
-    return `Gemini API error ${code} ${status}: ${message}`;
+    return Object.assign(
+      new Error(`Gemini API error ${status ?? "unknown"} ${label}: ${message}`),
+      { status },
+    );
   }
 }
