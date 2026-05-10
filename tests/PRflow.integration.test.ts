@@ -111,7 +111,6 @@ vi.mock("../src/ui/UI.js", () => ({
     renderPRCreated: vi.fn(),
     renderCopied: vi.fn(),
     renderCancelled: vi.fn(),
-    renderTokenEstimate: vi.fn(),
 
     render: vi.fn(),
     actionMenu: vi.fn(),

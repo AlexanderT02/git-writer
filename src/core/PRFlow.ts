@@ -7,7 +7,6 @@ import type { PRContextBuilder } from "../context/PRContextBuilder.js";
 import type { GitPRService } from "../git/GitPRService.js";
 import type { GitHubCLIService } from "../git/GitHubCliService.js";
 import { PRGenerator } from "../generation/PRGenerator.js";
-import { estimatePRTokens } from "../llm/estimate/generationEstimate.js";
 import { UI } from "../ui/UI.js";
 import { GracefulExit, UserCancelledError } from "../errors.js";
 import type { UsageTracker } from "../stats/UsageTracker.js";
@@ -79,8 +78,6 @@ export class PRFlow {
 
     const prContext = this.buildContext(selectedBaseBranch);
     const prGenerator = new PRGenerator(this.deps.ai, this.deps.config);
-
-    this.renderLargePRTokenEstimate(prGenerator, prContext);
 
     const startedAt = Date.now();
     const generatedPR = await prGenerator.generate(prContext);
@@ -158,17 +155,5 @@ export class PRFlow {
 
     console.log("");
     throw new GracefulExit(1);
-  }
-
-  private renderLargePRTokenEstimate(
-    prGenerator: PRGenerator,
-    prContext: PRContext,
-  ): void {
-    const estimatedTokens = estimatePRTokens(prGenerator, prContext);
-    const warningThreshold = this.deps.config.context.fastModeTokenLimit * 3;
-
-    if (estimatedTokens <= warningThreshold) return;
-
-    UI.renderTokenEstimate(estimatedTokens, "Large PR token estimate");
   }
 }
