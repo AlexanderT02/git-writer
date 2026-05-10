@@ -132,7 +132,7 @@ export class UI {
     console.log(chalk.dim("Body"));
     console.log(chalk.dim("────"));
 
-    UI.renderMarkdown(description);
+    console.log(marked(description));
 
     console.log(border);
   }
@@ -167,7 +167,7 @@ export class UI {
     console.log(chalk.gray("\nCancelled\n"));
   }
 
-  static async actionMenu(config: AppConfig): Promise<UiAction> {
+  static async commitActionMenu(config: AppConfig): Promise<UiAction> {
     return select<UiAction>({
       message: config.ui.actionMenuMessage,
       choices: [
@@ -238,10 +238,6 @@ export class UI {
     });
   }
 
-  static renderMarkdown(markdown: string): void {
-    console.log(marked(markdown));
-  }
-
   static renderPRCreated(url: string): void {
     console.log(chalk.green("\n✔ Pull request created\n"));
 
@@ -249,9 +245,5 @@ export class UI {
       console.log(chalk.cyan(url));
       console.log("");
     }
-  }
-
-  static renderTokenEstimate(totalTokens: number, label = "Tokens"): void {
-    console.log(chalk.dim(`${label}: ~${totalTokens.toLocaleString()}`));
   }
 }

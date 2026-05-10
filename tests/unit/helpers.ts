@@ -38,8 +38,6 @@ export function createTestConfig(overrides: Partial<AppConfig> = {}): AppConfig 
       smallFileThreshold: 3_000,
       contextLines: 30,
       maxFileBufferBytes: 10 * 1024 * 1024,
-      fastModeTokenLimit: 80_000,
-      fastModeFileLimit: 50,
       excludedContentPatterns: [
         "package-lock.json",
         "pnpm-lock.yaml",
@@ -64,11 +62,6 @@ export function createTestConfig(overrides: Partial<AppConfig> = {}): AppConfig 
       reasoningDiffPreviewLines: 80,
       preferredBulletCount: 2,
       maxBulletCount: 3,
-    },
-    
-    grouping: {
-        splitThreshold: 8,
-        maxGroups: 10,
     },
     
     ui: {

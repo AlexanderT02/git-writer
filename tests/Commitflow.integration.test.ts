@@ -95,7 +95,7 @@ describe("Commit flow integration", () => {
     writeFileSync("README.md", "# Test\n");
     git("add", "README.md");
     git("commit", "-m", "chore: initial commit");
-    vi.spyOn(UI, "actionMenu").mockResolvedValue("commit");
+    vi.spyOn(UI, "commitActionMenu").mockResolvedValue("commit");
     vi.spyOn(UI, "renderCommitCreated").mockImplementation(() => {});
 
     mockLLM.complete.mockClear();

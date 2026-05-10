@@ -37,7 +37,7 @@ export class CommitFlow {
       let durationMs = Date.now() - startedAt;
 
       while (true) {
-        const action = await UI.actionMenu(config);
+        const action = await UI.commitActionMenu(config);
 
         if (action === "commit") {
           this.commit(message, {

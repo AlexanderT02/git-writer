@@ -32,8 +32,6 @@ export interface AppConfig {
   };
 
   context: {
-    fastModeFileLimit: number;
-    fastModeTokenLimit: number;
     tokenBudget: number;
     smallFileThreshold: number;
     contextLines: number;
@@ -46,11 +44,6 @@ export interface AppConfig {
     loop: boolean;
     message: string;
     help: string;
-  };
-
-  grouping: {
-    splitThreshold: number;
-    maxGroups: number;
   };
 
   commit: {
@@ -123,8 +116,6 @@ export const config: AppConfig = {
     smallFileThreshold: 3_000,
     contextLines: 30,
     maxFileBufferBytes: 10 * 1024 * 1024,
-    fastModeTokenLimit: 80_000,
-    fastModeFileLimit: 50,
     excludedContentPatterns: [
       "package-lock.json",
       "pnpm-lock.yaml",
@@ -144,12 +135,6 @@ export const config: AppConfig = {
     loop: false,
     message: "Select files to stage",
     help: "↑/↓ move · Space select · Enter confirm",
-  },
-
-  // Auto-split grouping for fast mode with many files.
-  grouping: {
-    splitThreshold: 2,
-    maxGroups: 15,
   },
 
   // Commit message output constraints.
