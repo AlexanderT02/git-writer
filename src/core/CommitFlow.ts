@@ -83,7 +83,11 @@ export class CommitFlow {
           UI.renderCopied();
           continue;
         }
-
+        const selectedFiles = files
+          .split("\n")
+          .map((file) => file.trim())
+          .filter(Boolean);
+        this.deps.git.unstageFiles(selectedFiles);
         UI.renderCancelled();
         throw new UserCancelledError();
       }
