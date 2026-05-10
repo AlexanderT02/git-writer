@@ -7,7 +7,6 @@ import TerminalRenderer from "marked-terminal";
 import type {
   BranchPRSummary,
   CommitStats,
-  CreatedCommitSummary,
   UiAction,
 } from "../types/types.js";
 marked.setOptions({
@@ -15,27 +14,6 @@ marked.setOptions({
 });
 
 export class UI {
-  static renderCreatedCommitSummary(commits: CreatedCommitSummary[]) {
-    if (!commits.length) return;
-
-    console.log(chalk.bold("\n  Created commit(s):\n"));
-
-    for (const commit of commits) {
-      const shortSha = commit.sha.slice(0, 7);
-
-      const stats = chalk.dim(
-        `(${chalk.cyan(commit.stats.files)} files  ${chalk.green(
-          "+" + commit.stats.insertions,
-        )}  ${chalk.red("-" + commit.stats.deletions)})`,
-      );
-
-      console.log(
-        `  ${chalk.dim(shortSha)}  ${chalk.green(commit.title)}  ${stats}`,
-      );
-    }
-
-    console.log("");
-  }
 
   static createCommitMessageLiveRenderer(config: AppConfig): {
     render: (message: string) => void;

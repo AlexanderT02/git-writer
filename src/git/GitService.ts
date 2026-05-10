@@ -295,30 +295,6 @@ export class GitService {
     }
   }
 
-  getCommitSummariesSince(baseSha: string): CreatedCommitSummary[] {
-    const output = this.runGitOrEmpty([
-      "log",
-      "--reverse",
-      "--pretty=format:%H%x09%s",
-      `${baseSha}..HEAD`,
-    ]);
-
-    if (!output.trim()) return [];
-
-    return output
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => {
-        const [sha = "", title = ""] = line.split("\t");
-
-        return {
-          sha,
-          title,
-          stats: this.getCommitStatsByRef(sha),
-        };
-      });
-  }
-
   getCurrentHeadSha(): string {
     try {
       return this.runGit(["rev-parse", "HEAD"]).trim();
@@ -330,28 +306,5 @@ export class GitService {
 
   resetSoftTo(ref: string): void {
     this.runGitWriteCommand(["reset", "--soft", ref], "Failed to reset commits");
-  }
-
-  private getCommitStatsByRef(ref: string): {
-    files: number;
-    insertions: number;
-    deletions: number;
-  } {
-    const output = this.runGitOrEmpty([
-      "show",
-      "--shortstat",
-      "--format=",
-      ref,
-    ]);
-
-    const filesMatch = output.match(/(\d+) files? changed/);
-    const insertionsMatch = output.match(/(\d+) insertions?\(\+\)/);
-    const deletionsMatch = output.match(/(\d+) deletions?\(-\)/);
-
-    return {
-      files: filesMatch ? Number(filesMatch[1]) : 0,
-      insertions: insertionsMatch ? Number(insertionsMatch[1]) : 0,
-      deletions: deletionsMatch ? Number(deletionsMatch[1]) : 0,
-    };
   }
 }

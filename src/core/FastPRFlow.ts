@@ -62,15 +62,6 @@ export class FastPRFlow {
       throw new GracefulExit(0);
     }
 
-    const createdCommits =
-      this.deps.git.getCommitSummariesSince(headBeforeFastCommit);
-
-    if (!createdCommits.length) {
-      console.log("\n  ✖ Fast commit completed, but no created commits were found.\n");
-      throw new GracefulExit(1);
-    }
-
-    UI.renderCreatedCommitSummary(createdCommits);
     if (!force) {
       const action = await this.confirmPush();
 
