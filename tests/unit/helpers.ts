@@ -1,7 +1,7 @@
 import { vi } from "vitest";
-import type { AppConfig } from "../src/config/config.js";
-import type { LLM } from "../src/llm/LLM.js";
-import type { LLMResult } from "../src/types/types.js";
+import type { AppConfig } from "../../src/config/config.js";
+import type { LLM } from "../../src/llm/LLM.js";
+import type { LLMResult } from "../../src/types/types.js";
 
 export function createTestConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   return {

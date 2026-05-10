@@ -1,33 +1,69 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockRunCommitInteractive = vi.fn();
-const mockRunPRInteractive = vi.fn();
-const mockRenderStats = vi.fn();
-const mockRenderReset = vi.fn();
-const mockGetCurrentProvider = vi.fn();
-const mockSetProvider = vi.fn();
-const mockIsProviderName = vi.fn();
-const mockAvailableProviders = vi.fn();
-
-vi.mock("child_process", () => ({
-  execFileSync: vi.fn(() => "ok"),
+const {
+  mockRunCommitInteractive,
+  mockRunPRInteractive,
+  mockRenderStats,
+  mockRenderReset,
+  mockGetCurrentProvider,
+  mockSetProvider,
+  mockIsProviderName,
+  mockAvailableProviders,
+  mockExecFileSync,
+  mockSpawnSync,
+} = vi.hoisted(() => ({
+  mockRunCommitInteractive: vi.fn(),
+  mockRunPRInteractive: vi.fn(),
+  mockRenderStats: vi.fn(),
+  mockRenderReset: vi.fn(),
+  mockGetCurrentProvider: vi.fn(),
+  mockSetProvider: vi.fn(),
+  mockIsProviderName: vi.fn(),
+  mockAvailableProviders: vi.fn(),
+  mockExecFileSync: vi.fn(() => "ok"),
+  mockSpawnSync: vi.fn(() => ({
+    status: 0,
+    stdout: "ok",
+    stderr: "",
+    error: undefined,
+  })),
 }));
 
-vi.mock("../src/core/App.js", () => ({
+vi.mock("child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("child_process")>();
+
+  return {
+    ...actual,
+    execFileSync: mockExecFileSync,
+    spawnSync: mockSpawnSync,
+  };
+});
+
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+
+  return {
+    ...actual,
+    execFileSync: mockExecFileSync,
+    spawnSync: mockSpawnSync,
+  };
+});
+
+vi.mock("../../src/core/App.js", () => ({
   App: vi.fn().mockImplementation(() => ({
     runCommitInteractive: mockRunCommitInteractive,
     runPRInteractive: mockRunPRInteractive,
   })),
 }));
 
-vi.mock("../src/stats/StatsRenderer.js", () => ({
+vi.mock("../../src/stats/StatsRenderer.js", () => ({
   StatsRenderer: vi.fn().mockImplementation(() => ({
     render: mockRenderStats,
     renderReset: mockRenderReset,
   })),
 }));
 
-vi.mock("../src/llm/ProviderSettings.js", () => ({
+vi.mock("../../src/llm/ProviderSettings.js", () => ({
   ProviderSettings: vi.fn().mockImplementation(() => ({
     getCurrentProvider: mockGetCurrentProvider,
     setProvider: mockSetProvider,
@@ -36,7 +72,7 @@ vi.mock("../src/llm/ProviderSettings.js", () => ({
   })),
 }));
 
-vi.mock("../src/config/config.js", () => ({
+vi.mock("../../src/config/config.js", () => ({
   config: {
     llm: {
       defaultProvider: "openai",
@@ -79,7 +115,7 @@ describe("CLI commands", () => {
   });
 
   async function getCommandHelp(commandName: string): Promise<string> {
-    const { createProgram } = await import("../src/index.js");
+    const { createProgram } = await import("../../src/index.js");
 
     const program = createProgram();
 
@@ -95,7 +131,7 @@ describe("CLI commands", () => {
   }
 
   async function runCommand(args: string[]): Promise<CommandResult> {
-    const { createProgram } = await import("../src/index.js");
+    const { createProgram } = await import("../../src/index.js");
 
     const program = createProgram();
 
@@ -155,7 +191,7 @@ describe("CLI commands", () => {
 
   describe("commit", () => {
     it("runs commit command with current provider", async () => {
-      const { App } = await import("../src/core/App.js");
+      const { App } = await import("../../src/core/App.js");
 
       await runCommand(["commit"]);
 
@@ -165,7 +201,7 @@ describe("CLI commands", () => {
     });
 
     it("runs commit alias c", async () => {
-      const { App } = await import("../src/core/App.js");
+      const { App } = await import("../../src/core/App.js");
 
       await runCommand(["c"]);
 
@@ -175,7 +211,7 @@ describe("CLI commands", () => {
     });
 
     it("runs commit with --force as fast commit mode", async () => {
-      const { App } = await import("../src/core/App.js");
+      const { App } = await import("../../src/core/App.js");
 
       await runCommand(["commit", "--force"]);
 
@@ -185,7 +221,7 @@ describe("CLI commands", () => {
     });
 
     it("runs commit with -f as fast commit mode", async () => {
-      const { App } = await import("../src/core/App.js");
+      const { App } = await import("../../src/core/App.js");
 
       await runCommand(["commit", "-f"]);
 
@@ -195,7 +231,7 @@ describe("CLI commands", () => {
     });
 
     it("passes normalized issue refs to commit", async () => {
-      const { App } = await import("../src/core/App.js");
+      const { App } = await import("../../src/core/App.js");
 
       await runCommand(["commit", "123", "   ", "456"]);
 
@@ -204,7 +240,7 @@ describe("CLI commands", () => {
     });
 
     it("passes normalized issue refs to forced commit", async () => {
-      const { App } = await import("../src/core/App.js");
+      const { App } = await import("../../src/core/App.js");
 
       await runCommand(["commit", "--force", "123", "   ", "456"]);
 
@@ -215,7 +251,7 @@ describe("CLI commands", () => {
 
   describe("pr", () => {
     it("runs pr command with current provider", async () => {
-      const { App } = await import("../src/core/App.js");
+      const { App } = await import("../../src/core/App.js");
 
       await runCommand(["pr"]);
 
@@ -225,7 +261,7 @@ describe("CLI commands", () => {
     });
 
     it("runs pr alias p", async () => {
-      const { App } = await import("../src/core/App.js");
+      const { App } = await import("../../src/core/App.js");
 
       await runCommand(["p"]);
 
@@ -234,7 +270,7 @@ describe("CLI commands", () => {
     });
 
     it("runs pr alias pull-request", async () => {
-      const { App } = await import("../src/core/App.js");
+      const { App } = await import("../../src/core/App.js");
 
       await runCommand(["pull-request"]);
 
@@ -243,7 +279,7 @@ describe("CLI commands", () => {
     });
 
     it("passes base branch with --base", async () => {
-      const { App } = await import("../src/core/App.js");
+      const { App } = await import("../../src/core/App.js");
 
       await runCommand(["pr", "--base", "origin/develop"]);
 
@@ -252,7 +288,7 @@ describe("CLI commands", () => {
     });
 
     it("passes trimmed base branch with --base", async () => {
-      const { App } = await import("../src/core/App.js");
+      const { App } = await import("../../src/core/App.js");
 
       await runCommand(["pr", "--base", "  origin/develop  "]);
 
@@ -261,7 +297,7 @@ describe("CLI commands", () => {
     });
 
     it("passes base branch with -b", async () => {
-      const { App } = await import("../src/core/App.js");
+      const { App } = await import("../../src/core/App.js");
 
       await runCommand(["pr", "-b", "origin/main"]);
 
@@ -270,7 +306,7 @@ describe("CLI commands", () => {
     });
 
     it("runs pr --safe in fast PR mode with confirmations", async () => {
-      const { App } = await import("../src/core/App.js");
+      const { App } = await import("../../src/core/App.js");
 
       await runCommand(["pr", "--safe"]);
 
@@ -279,7 +315,7 @@ describe("CLI commands", () => {
     });
 
     it("runs pr -s in fast PR mode with confirmations", async () => {
-      const { App } = await import("../src/core/App.js");
+      const { App } = await import("../../src/core/App.js");
 
       await runCommand(["pr", "-s"]);
 
@@ -288,7 +324,7 @@ describe("CLI commands", () => {
     });
 
     it("runs pr --force in fast PR mode without confirmations", async () => {
-      const { App } = await import("../src/core/App.js");
+      const { App } = await import("../../src/core/App.js");
 
       await runCommand(["pr", "--force"]);
 
@@ -297,7 +333,7 @@ describe("CLI commands", () => {
     });
 
     it("runs pr -f in fast PR mode without confirmations", async () => {
-      const { App } = await import("../src/core/App.js");
+      const { App } = await import("../../src/core/App.js");
 
       await runCommand(["pr", "-f"]);
 
@@ -306,7 +342,7 @@ describe("CLI commands", () => {
     });
 
     it("runs pr --force with base branch", async () => {
-      const { App } = await import("../src/core/App.js");
+      const { App } = await import("../../src/core/App.js");
 
       await runCommand(["pr", "--force", "--base", "origin/develop"]);
 
@@ -315,7 +351,7 @@ describe("CLI commands", () => {
     });
 
     it("treats --force as stronger than --safe", async () => {
-      const { App } = await import("../src/core/App.js");
+      const { App } = await import("../../src/core/App.js");
 
       await runCommand(["pr", "--safe", "--force"]);
 

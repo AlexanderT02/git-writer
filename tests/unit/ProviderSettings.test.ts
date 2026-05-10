@@ -64,7 +64,7 @@ describe("ProviderSettings", () => {
   });
 
   it("returns default provider when no settings file exists", async () => {
-    const { ProviderSettings } = await import("../src/llm/ProviderSettings.js");
+    const { ProviderSettings } = await import("../../src/llm/ProviderSettings.js");
 
     const settings = new ProviderSettings();
 
@@ -72,7 +72,7 @@ describe("ProviderSettings", () => {
   });
 
   it("returns default provider config when no settings file exists", async () => {
-    const { ProviderSettings } = await import("../src/llm/ProviderSettings.js");
+    const { ProviderSettings } = await import("../../src/llm/ProviderSettings.js");
 
     const settings = new ProviderSettings();
 
@@ -93,7 +93,7 @@ describe("ProviderSettings", () => {
       }),
     );
 
-    const { ProviderSettings } = await import("../src/llm/ProviderSettings.js");
+    const { ProviderSettings } = await import("../../src/llm/ProviderSettings.js");
 
     const settings = new ProviderSettings();
 
@@ -112,7 +112,7 @@ describe("ProviderSettings", () => {
       }),
     );
 
-    const { ProviderSettings } = await import("../src/llm/ProviderSettings.js");
+    const { ProviderSettings } = await import("../../src/llm/ProviderSettings.js");
 
     const settings = new ProviderSettings();
 
@@ -133,7 +133,7 @@ describe("ProviderSettings", () => {
       }),
     );
 
-    const { ProviderSettings } = await import("../src/llm/ProviderSettings.js");
+    const { ProviderSettings } = await import("../../src/llm/ProviderSettings.js");
 
     const settings = new ProviderSettings();
 
@@ -145,7 +145,7 @@ describe("ProviderSettings", () => {
   });
 
   it("sets provider and writes matching default models", async () => {
-    const { ProviderSettings } = await import("../src/llm/ProviderSettings.js");
+    const { ProviderSettings } = await import("../../src/llm/ProviderSettings.js");
 
     const settings = new ProviderSettings();
 
@@ -171,7 +171,7 @@ describe("ProviderSettings", () => {
       }),
     );
 
-    const { ProviderSettings } = await import("../src/llm/ProviderSettings.js");
+    const { ProviderSettings } = await import("../../src/llm/ProviderSettings.js");
 
     const settings = new ProviderSettings();
 
@@ -186,7 +186,7 @@ describe("ProviderSettings", () => {
   });
 
   it("throws when setting an invalid provider", async () => {
-    const { ProviderSettings } = await import("../src/llm/ProviderSettings.js");
+    const { ProviderSettings } = await import("../../src/llm/ProviderSettings.js");
 
     const settings = new ProviderSettings();
 
@@ -196,7 +196,7 @@ describe("ProviderSettings", () => {
   });
 
   it("returns available providers", async () => {
-    const { ProviderSettings } = await import("../src/llm/ProviderSettings.js");
+    const { ProviderSettings } = await import("../../src/llm/ProviderSettings.js");
 
     const settings = new ProviderSettings();
 
@@ -208,7 +208,7 @@ describe("ProviderSettings", () => {
   });
 
   it("checks whether a value is a valid provider name", async () => {
-    const { ProviderSettings } = await import("../src/llm/ProviderSettings.js");
+    const { ProviderSettings } = await import("../../src/llm/ProviderSettings.js");
 
     const settings = new ProviderSettings();
 
@@ -221,7 +221,7 @@ describe("ProviderSettings", () => {
   it("returns defaults when the settings file contains invalid JSON", async () => {
     fileStore.set(CONFIG_FILE, "{ invalid json");
 
-    const { ProviderSettings } = await import("../src/llm/ProviderSettings.js");
+    const { ProviderSettings } = await import("../../src/llm/ProviderSettings.js");
 
     const settings = new ProviderSettings();
 

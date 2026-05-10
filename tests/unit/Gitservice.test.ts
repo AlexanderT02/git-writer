@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { GitService } from "../src/git/GitService.js";
+import { GitService } from "../../src/git/GitService.js";
 import { createTestConfig } from "./helpers.js";
 
 /**

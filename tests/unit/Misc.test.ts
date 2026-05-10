@@ -4,7 +4,7 @@ import { createTestConfig } from "./helpers.js";
 describe("createLLM factory", () => {
   it("throws when default provider has no model config", async () => {
     // Dynamic import to avoid top-level side effects
-    const { createLLMProvider: createLLM } = await import("../src/llm/Factory.js");
+    const { createLLMProvider: createLLM } = await import("../../src/llm/Factory.js");
 
     const config = createTestConfig();
 
@@ -16,7 +16,7 @@ describe("createLLM factory", () => {
   });
 
   it("throws when provider override has no model config", async () => {
-    const { createLLMProvider: createLLM } = await import("../src/llm/Factory.js");
+    const { createLLMProvider: createLLM } = await import("../../src/llm/Factory.js");
 
     const config = createTestConfig();
 
@@ -26,7 +26,7 @@ describe("createLLM factory", () => {
   });
 
   it("throws when provider has config but no implementation", async () => {
-    const { createLLMProvider: createLLM } = await import("../src/llm/Factory.js");
+    const { createLLMProvider: createLLM } = await import("../../src/llm/Factory.js");
 
     const config = createTestConfig();
 
@@ -50,8 +50,8 @@ vi.mock("child_process", () => ({
 import { spawnSync } from "child_process";
 const mockedSpawnSync = vi.mocked(spawnSync);
 
-import { GitHubCLIService } from "../src/git/GitHubCliService.js";
-import { GitService } from "../src/git/GitService.js";
+import { GitHubCLIService } from "../../src/git/GitHubCliService.js";
+import { GitService } from "../../src/git/GitService.js";
 
 function createGHService() {
   const config = createTestConfig();
@@ -185,21 +185,21 @@ describe("GitHubCLIService", () => {
 
 describe("Error classes", () => {
   it("GracefulExit has correct defaults", async () => {
-    const { GracefulExit } = await import("../src/errors.js");
+    const { GracefulExit } = await import("../../src/errors.js");
     const err = new GracefulExit();
     expect(err.code).toBe(0);
     expect(err.name).toBe("GracefulExit");
   });
 
   it("GracefulExit accepts custom code", async () => {
-    const { GracefulExit } = await import("../src/errors.js");
+    const { GracefulExit } = await import("../../src/errors.js");
     const err = new GracefulExit(1, "custom");
     expect(err.code).toBe(1);
     expect(err.message).toBe("custom");
   });
 
   it("UserCancelledError extends GracefulExit with code 0", async () => {
-    const { UserCancelledError, GracefulExit } = await import("../src/errors.js");
+    const { UserCancelledError, GracefulExit } = await import("../../src/errors.js");
     const err = new UserCancelledError();
     expect(err).toBeInstanceOf(GracefulExit);
     expect(err.code).toBe(0);

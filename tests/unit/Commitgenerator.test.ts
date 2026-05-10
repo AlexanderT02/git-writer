@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createTestConfig, createMockLLM } from "./helpers.js";
-import { CommitGenerator } from "../src/generation/CommitGenerator.js";
-import type { CommitContext } from "../src/types/types.js";
+import { CommitGenerator } from "../../src/generation/CommitGenerator.js";
+import type { CommitContext } from "../../src/types/types.js";
 
 function createGenerator(llmOverrides: Parameters<typeof createMockLLM>[0] = {}) {
   const config = createTestConfig();
