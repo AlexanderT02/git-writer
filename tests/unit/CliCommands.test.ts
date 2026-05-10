@@ -114,22 +114,6 @@ describe("CLI commands", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
-  async function getCommandHelp(commandName: string): Promise<string> {
-    const { createProgram } = await import("../../src/index.js");
-
-    const program = createProgram();
-
-    const command = program.commands.find((cmd) => {
-      return cmd.name() === commandName || cmd.aliases().includes(commandName);
-    });
-
-    if (!command) {
-      throw new Error(`Command not found: ${commandName}`);
-    }
-
-    return command.helpInformation();
-  }
-
   async function runCommand(args: string[]): Promise<CommandResult> {
     const { createProgram } = await import("../../src/index.js");
 
@@ -210,26 +194,6 @@ describe("CLI commands", () => {
       expect(mockRunCommitInteractive).toHaveBeenCalledTimes(1);
     });
 
-    it("runs commit with --force as fast commit mode", async () => {
-      const { App } = await import("../../src/core/App.js");
-
-      await runCommand(["commit", "--force"]);
-
-      expect(mockGetCurrentProvider).toHaveBeenCalledTimes(1);
-      expect(App).toHaveBeenCalledWith(true, [], "openai");
-      expect(mockRunCommitInteractive).toHaveBeenCalledTimes(1);
-    });
-
-    it("runs commit with -f as fast commit mode", async () => {
-      const { App } = await import("../../src/core/App.js");
-
-      await runCommand(["commit", "-f"]);
-
-      expect(mockGetCurrentProvider).toHaveBeenCalledTimes(1);
-      expect(App).toHaveBeenCalledWith(true, [], "openai");
-      expect(mockRunCommitInteractive).toHaveBeenCalledTimes(1);
-    });
-
     it("passes normalized issue refs to commit", async () => {
       const { App } = await import("../../src/core/App.js");
 
@@ -238,41 +202,23 @@ describe("CLI commands", () => {
       expect(App).toHaveBeenCalledWith(false, ["123", "456"], "openai");
       expect(mockRunCommitInteractive).toHaveBeenCalledTimes(1);
     });
-
-    it("passes normalized issue refs to forced commit", async () => {
-      const { App } = await import("../../src/core/App.js");
-
-      await runCommand(["commit", "--force", "123", "   ", "456"]);
-
-      expect(App).toHaveBeenCalledWith(true, ["123", "456"], "openai");
-      expect(mockRunCommitInteractive).toHaveBeenCalledTimes(1);
-    });
   });
 
-  describe("pr", () => {
-    it("runs pr command with current provider", async () => {
+  describe("pull-request", () => {
+    it("runs pull-request command with current provider", async () => {
       const { App } = await import("../../src/core/App.js");
 
-      await runCommand(["pr"]);
+      await runCommand(["pull-request"]);
 
       expect(mockGetCurrentProvider).toHaveBeenCalledTimes(1);
       expect(App).toHaveBeenCalledWith(false, [], "openai", false);
       expect(mockRunPRInteractive).toHaveBeenCalledWith(undefined);
     });
 
-    it("runs pr alias p", async () => {
+    it("runs pull-request alias pr", async () => {
       const { App } = await import("../../src/core/App.js");
 
-      await runCommand(["p"]);
-
-      expect(App).toHaveBeenCalledWith(false, [], "openai", false);
-      expect(mockRunPRInteractive).toHaveBeenCalledWith(undefined);
-    });
-
-    it("runs pr alias pull-request", async () => {
-      const { App } = await import("../../src/core/App.js");
-
-      await runCommand(["pull-request"]);
+      await runCommand(["pr"]);
 
       expect(App).toHaveBeenCalledWith(false, [], "openai", false);
       expect(mockRunPRInteractive).toHaveBeenCalledWith(undefined);
@@ -303,60 +249,6 @@ describe("CLI commands", () => {
 
       expect(App).toHaveBeenCalledWith(false, [], "openai", false);
       expect(mockRunPRInteractive).toHaveBeenCalledWith("origin/main");
-    });
-
-    it("runs pr --safe in fast PR mode with confirmations", async () => {
-      const { App } = await import("../../src/core/App.js");
-
-      await runCommand(["pr", "--safe"]);
-
-      expect(App).toHaveBeenCalledWith(true, [], "openai", false);
-      expect(mockRunPRInteractive).toHaveBeenCalledWith(undefined);
-    });
-
-    it("runs pr -s in fast PR mode with confirmations", async () => {
-      const { App } = await import("../../src/core/App.js");
-
-      await runCommand(["pr", "-s"]);
-
-      expect(App).toHaveBeenCalledWith(true, [], "openai", false);
-      expect(mockRunPRInteractive).toHaveBeenCalledWith(undefined);
-    });
-
-    it("runs pr --force in fast PR mode without confirmations", async () => {
-      const { App } = await import("../../src/core/App.js");
-
-      await runCommand(["pr", "--force"]);
-
-      expect(App).toHaveBeenCalledWith(true, [], "openai", true);
-      expect(mockRunPRInteractive).toHaveBeenCalledWith(undefined);
-    });
-
-    it("runs pr -f in fast PR mode without confirmations", async () => {
-      const { App } = await import("../../src/core/App.js");
-
-      await runCommand(["pr", "-f"]);
-
-      expect(App).toHaveBeenCalledWith(true, [], "openai", true);
-      expect(mockRunPRInteractive).toHaveBeenCalledWith(undefined);
-    });
-
-    it("runs pr --force with base branch", async () => {
-      const { App } = await import("../../src/core/App.js");
-
-      await runCommand(["pr", "--force", "--base", "origin/develop"]);
-
-      expect(App).toHaveBeenCalledWith(true, [], "openai", true);
-      expect(mockRunPRInteractive).toHaveBeenCalledWith("origin/develop");
-    });
-
-    it("treats --force as stronger than --safe", async () => {
-      const { App } = await import("../../src/core/App.js");
-
-      await runCommand(["pr", "--safe", "--force"]);
-
-      expect(App).toHaveBeenCalledWith(true, [], "openai", true);
-      expect(mockRunPRInteractive).toHaveBeenCalledWith(undefined);
     });
 
     it("rejects empty base branch with validation context", async () => {
@@ -495,26 +387,6 @@ describe("CLI commands", () => {
       expect(output.stdout).toContain("pr");
       expect(output.stdout).toContain("provider");
       expect(output.stdout).toContain("stats");
-    });
-
-    it("shows force option in commit help", async () => {
-      const output = await getCommandHelp("commit");
-
-      expect(output).toContain("-f, --force");
-      expect(output).toContain("Skip the interactive menu");
-      expect(output).toContain("multiple logical commits");
-    });
-
-    it("shows safe and force options in pr help", async () => {
-      const output = await getCommandHelp("pr");
-      const normalizedOutput = output.replace(/\s+/g, " ");
-
-      expect(normalizedOutput).toContain(
-        "-s, --safe Commit locally, then confirm before pushing and creating the PR",
-      );
-      expect(normalizedOutput).toContain(
-        "-f, --force Force mode: commit, push, and create PR without confirmations",
-      );
     });
   });
 });

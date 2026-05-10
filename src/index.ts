@@ -148,10 +148,6 @@ export function createProgram(): Command {
     .alias("c")
     .description("Generate and create an AI-assisted commit")
     .argument("[issues...]", "Issue references, e.g. 123 456")
-    .option(
-      "-f, --force",
-      "Skip the interactive menu and commit directly; large changes may be split into multiple logical commits",
-    )
     .action(async (issues: string[], options: CommitOptions) => {
       await runCommit(issues, options);
     });
@@ -165,11 +161,6 @@ export function createProgram(): Command {
       "Base branch used to compare changes, e.g. origin/main",
       validateGitRef,
     )
-    .option(
-      "-s, --safe",
-      "Commit locally, then confirm before pushing and creating the PR",
-    )
-    .option("-f, --force", "Force mode: commit, push, and create PR without confirmations")
     .action(async (options: PROptions) => {
       await runPR(options);
     });

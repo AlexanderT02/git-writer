@@ -130,6 +130,15 @@ export class GitService {
     this.runGitWriteCommand(["reset", "HEAD", "--quiet"], "Failed to unstage files");
   }
 
+  unstageFiles(files: string[]): void {
+    if (files.length === 0) return;
+
+    this.runGitWriteCommand(
+      ["reset", "HEAD", "--quiet", "--", ...files],
+      "Failed to unstage files",
+    );
+  }
+
   getStagedFileDiff(file: string): string {
     return this.getStagedDiff(["--", file]);
   }
@@ -292,18 +301,5 @@ export class GitService {
     if (result.status !== 0) {
       throw new Error(result.stderr || fallbackError);
     }
-  }
-
-  getCurrentHeadSha(): string {
-    try {
-      return this.runGit(["rev-parse", "HEAD"]).trim();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to read current HEAD: ${message}`);
-    }
-  }
-
-  resetSoftTo(ref: string): void {
-    this.runGitWriteCommand(["reset", "--soft", ref], "Failed to reset commits");
   }
 }
