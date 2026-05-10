@@ -360,7 +360,10 @@ ${sections}`;
   async generate(
     files: string,
     context: CommitContext,
+    options: { render?: boolean } = {},
   ): Promise<CommitGenerationResult> {
+    const render = options.render ?? true;
+
     const reasoningPrompt = this.buildReasoningPrompt(files, context);
 
     const spinner = ora("Analysing intent...").start();
@@ -381,49 +384,67 @@ ${sections}`;
     const messagePrompt = this.buildMessagePrompt(files, context, reasoning);
 
     const streamSpinner = ora("Generating commit message...").start();
-    const renderer = UI.createCommitMessageLiveRenderer(this.config);
 
+    let result: Awaited<ReturnType<typeof this.ai.complete | typeof this.ai.stream>>;
     let streamedText = "";
-    let result: Awaited<ReturnType<typeof this.ai.stream>>;
 
     try {
-      result = await this.withRetry(() =>
-        this.ai.stream(messagePrompt, (text) => {
-          streamSpinner.stop();
+      if (render) {
+        const renderer = UI.createCommitMessageLiveRenderer(this.config);
 
-          if (!text.trim()) return;
+        result = await this.withRetry(() =>
+          this.ai.stream(messagePrompt, (text) => {
+            streamSpinner.stop();
 
-          if (text.startsWith(streamedText)) {
-            // Provider sends full snapshot.
-            streamedText = text;
-          } else {
-            // Provider sends delta.
-            streamedText += text;
-          }
+            if (!text.trim()) return;
 
-          const sanitized = this.sanitizeCommitMessage(streamedText);
+            if (text.startsWith(streamedText)) {
+              // Provider sends full snapshot.
+              streamedText = text;
+            } else {
+              // Provider sends delta.
+              streamedText += text;
+            }
 
-          if (sanitized.trim()) {
-            renderer.render(sanitized);
-          }
-        }),
-      );
+            const sanitized = this.sanitizeCommitMessage(streamedText);
+
+            if (sanitized.trim()) {
+              renderer.render(sanitized);
+            }
+          }),
+        );
+
+        const message = this.sanitizeCommitMessage(result.text || streamedText);
+
+        renderer.end(message);
+
+        return {
+          message,
+          usage: {
+            reasoning: reasoningUsage,
+            generation: result.usage,
+            totalTokens:
+              (reasoningUsage?.totalTokens ?? 0) +
+              (result.usage?.totalTokens ?? 0),
+          },
+        };
+      }
+
+      result = await this.withRetry(() => this.ai.complete(messagePrompt));
     } finally {
       streamSpinner.stop();
     }
 
     const message = this.sanitizeCommitMessage(result.text || streamedText);
 
-    renderer.end(message);
-
     return {
-      message: this.sanitizeCommitMessage(result.text),
+      message,
       usage: {
         reasoning: reasoningUsage,
         generation: result.usage,
         totalTokens:
-        (reasoningUsage?.totalTokens ?? 0) +
-        (result.usage?.totalTokens ?? 0),
+          (reasoningUsage?.totalTokens ?? 0) +
+          (result.usage?.totalTokens ?? 0),
       },
     };
   }

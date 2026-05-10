@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, MockInstance } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -50,43 +50,15 @@ describe("Fast commit flow integration", () => {
 
     vi.clearAllMocks();
 
-    mockLLM.complete.mockResolvedValue({
-      text: [
-        "TYPE: feat",
-        "SCOPE: auth",
-        "INTENT: add login support",
-        "WHY: NONE",
-        "RISK: low",
-        "BULLETS:",
-        "- add login function",
-        "- expose authentication entry point",
-      ].join("\n"),
-      usage: {
-        inputTokens: 100,
-        outputTokens: 50,
-        totalTokens: 150,
-      },
-    });
+    mockLLM.complete.mockResolvedValue(reasoningGenerationResult());
 
     mockLLM.stream.mockImplementation(
       async (_prompt: string, onText?: (text: string) => void) => {
-        const text = [
-          "feat(auth): add login support",
-          "",
-          "- Add login function",
-          "- Expose authentication entry point",
-        ].join("\n");
+        const result = commitGenerationResult("feat(auth): add login support");
 
-        onText?.(text);
+        onText?.(result.text);
 
-        return {
-          text,
-          usage: {
-            inputTokens: 120,
-            outputTokens: 40,
-            totalTokens: 160,
-          },
-        };
+        return result;
       },
     );
   });
@@ -101,51 +73,36 @@ describe("Fast commit flow integration", () => {
 
     rmSync("README.md");
 
-    mockLLM.stream.mockImplementationOnce(
-      async (_prompt: string, onText?: (text: string) => void) => {
-        const text = [
-          "chore: remove README",
-          "",
-          "- Remove obsolete README file",
-        ].join("\n");
-
-        onText?.(text);
-
-        return {
-          text,
-          usage: {
-            inputTokens: 80,
-            outputTokens: 20,
-            totalTokens: 100,
-          },
-        };
-      },
+    mockLLM.stream.mockResolvedValueOnce(
+        commitGenerationResult("chore: remove README"),
     );
 
     const before = commitCount();
     const app = new App(true, [], "openai");
 
     await expect(app.runCommitInteractive()).rejects.toMatchObject({
-      code: 0,
+        code: 0,
     } satisfies Partial<GracefulExit>);
 
     expect(commitCount()).toBe(before + 1);
     expect(git("log", "-1", "--pretty=%s")).toBe("chore: remove README");
     expect(git("show", "--name-status", "--pretty=", "-1")).toContain(
-      "D\tREADME.md",
+        "D\tREADME.md",
     );
     expect(git("status", "--porcelain")).toBe("");
+
+    expect(mockLLM.complete).toHaveBeenCalledTimes(1);
+    expect(mockLLM.stream).toHaveBeenCalledTimes(1);
   });
 
   it("creates one commit per generated group and preserves grouped file ownership", async () => {
     const { App } = await import("../src/core/App.js");
     const { groups } = await prepareSplitScenario();
 
-    mockLLM.stream
-      .mockResolvedValueOnce(commitGenerationResult("feat(core): add core files"))
-      .mockResolvedValueOnce(
-        commitGenerationResult("chore(files): add supporting files"),
-      );
+    mockCompleteCommitMessages(
+      "feat(core): add core files",
+      "chore(files): add supporting files",
+    );
 
     const before = commitCount();
     const app = new App(true, [], "openai");
@@ -157,8 +114,8 @@ describe("Fast commit flow integration", () => {
     expect(mockCollectSummaries).toHaveBeenCalledTimes(1);
     expect(mockGroupChanges).toHaveBeenCalledTimes(1);
 
-    expect(mockLLM.complete).toHaveBeenCalledTimes(2);
-    expect(mockLLM.stream).toHaveBeenCalledTimes(2);
+    expect(mockLLM.complete).toHaveBeenCalledTimes(4);
+    expect(mockLLM.stream).not.toHaveBeenCalled();
 
     expect(commitCount()).toBe(before + 2);
 
@@ -175,13 +132,12 @@ describe("Fast commit flow integration", () => {
 
   it("prints compact grouping, per-commit status, and final total stats in split mode", async () => {
     const { App } = await import("../src/core/App.js");
-    const { splitThreshold } = await prepareSplitScenario();
+    const { splitThreshold, groups } = await prepareSplitScenario();
 
-    mockLLM.stream
-      .mockResolvedValueOnce(commitGenerationResult("feat(core): add core files"))
-      .mockResolvedValueOnce(
-        commitGenerationResult("chore(files): add supporting files"),
-      );
+    mockCompleteCommitMessages(
+      "feat(core): add core files",
+      "chore(files): add supporting files",
+    );
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
@@ -192,18 +148,17 @@ describe("Fast commit flow integration", () => {
         code: 0,
       } satisfies Partial<GracefulExit>);
 
-      const output = stripAnsi(
-        logSpy.mock.calls
-          .flat()
-          .map(String)
-          .join("\n"),
-      );
+      const output = readConsoleOutput(logSpy);
 
       expect(output).toContain(`Grouping ${splitThreshold} changed files`);
       expect(output).toContain("2 groups");
 
-      expect(output).toContain("1. feat: core files — 2 files");
-      expect(output).toContain("2. chore: supporting files — 2 files");
+      expect(output).toContain(
+        `1. feat: core files — ${formatFileCount(groups[0]!.files.length)}`,
+      );
+      expect(output).toContain(
+        `2. chore: supporting files — ${formatFileCount(groups[1]!.files.length)}`,
+      );
 
       expect(output).toContain("Commit 1/2: feat(core): add core files");
       expect(output).toContain(
@@ -211,10 +166,15 @@ describe("Fast commit flow integration", () => {
       );
 
       expect(output).toContain("Commit created");
-      expect(output).toContain("Done — 2 commits created (4 files  +4  -0)");
+      expect(output).toContain(
+        `Done — 2 commits created (${splitThreshold} files  +${splitThreshold}  -0)`,
+      );
 
       expect(output).not.toContain("file-0.ts added");
       expect(output).not.toContain("...and");
+
+      expect(mockLLM.complete).toHaveBeenCalledTimes(4);
+      expect(mockLLM.stream).not.toHaveBeenCalled();
     } finally {
       logSpy.mockRestore();
     }
@@ -227,15 +187,7 @@ describe("Fast commit flow integration", () => {
     const firstGroupFiles = ["file-0.ts", "file-1.ts"];
     const missingGroupFiles = ["does-not-exist.ts"];
 
-    mockCollectSummaries.mockReturnValue(
-      Array.from({ length: splitThreshold }, (_, i) => ({
-        file: `file-${i}.ts`,
-        status: "A",
-        additions: 1,
-        deletions: 0,
-        summary: `file-${i}.ts added`,
-      })),
-    );
+    mockCollectSummaries.mockReturnValue(createFileSummaries(splitThreshold));
 
     mockGroupChanges.mockResolvedValue({
       groups: [
@@ -252,9 +204,7 @@ describe("Fast commit flow integration", () => {
       ],
     });
 
-    mockLLM.stream.mockResolvedValueOnce(
-      commitGenerationResult("feat(core): add core files"),
-    );
+    mockCompleteCommitMessages("feat(core): add core files");
 
     const before = commitCount();
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
@@ -266,16 +216,12 @@ describe("Fast commit flow integration", () => {
         code: 0,
       } satisfies Partial<GracefulExit>);
 
-      const output = stripAnsi(
-        logSpy.mock.calls
-          .flat()
-          .map(String)
-          .join("\n"),
-      );
+      const output = readConsoleOutput(logSpy);
 
       expect(commitCount()).toBe(before + 1);
-      expect(mockLLM.complete).toHaveBeenCalledTimes(1);
-      expect(mockLLM.stream).toHaveBeenCalledTimes(1);
+      expect(mockLLM.complete).toHaveBeenCalledTimes(2);
+      expect(mockLLM.stream).not.toHaveBeenCalled();
+
       expect(output).toContain("Skipped missing files: no stageable files");
       expect(output).toContain("Done — 1 commit created");
     } finally {
@@ -290,67 +236,51 @@ describe("Fast commit flow integration", () => {
     const validFiles = ["file-0.ts", "file-1.ts"];
     const missingFile = "does-not-exist.ts";
 
-    mockCollectSummaries.mockReturnValue(
-        Array.from({ length: splitThreshold }, (_, i) => ({
-        file: `file-${i}.ts`,
-        status: "A",
-        additions: 1,
-        deletions: 0,
-        summary: `file-${i}.ts added`,
-        })),
-    );
+    mockCollectSummaries.mockReturnValue(createFileSummaries(splitThreshold));
 
     mockGroupChanges.mockResolvedValue({
-        groups: [
+      groups: [
         {
-            label: "mixed files",
-            conventionalType: "feat",
-            files: [validFiles[0], missingFile, validFiles[1]],
+          label: "mixed files",
+          conventionalType: "feat",
+          files: [validFiles[0], missingFile, validFiles[1]],
         },
-        ],
+      ],
     });
 
-    mockLLM.stream.mockResolvedValueOnce(
-        commitGenerationResult("feat(files): add available files"),
-    );
+    mockCompleteCommitMessages("feat(files): add available files");
 
     const before = commitCount();
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     try {
-        const app = new App(true, [], "openai");
+      const app = new App(true, [], "openai");
 
-        await expect(app.runCommitInteractive()).rejects.toMatchObject({
+      await expect(app.runCommitInteractive()).rejects.toMatchObject({
         code: 0,
-        } satisfies Partial<GracefulExit>);
+      } satisfies Partial<GracefulExit>);
 
-        const output = stripAnsi(
-        logSpy.mock.calls
-            .flat()
-            .map(String)
-            .join("\n"),
-        );
+      const output = readConsoleOutput(logSpy);
 
-        expect(commitCount()).toBe(before + 1);
+      expect(commitCount()).toBe(before + 1);
+      expect(mockLLM.complete).toHaveBeenCalledTimes(2);
+      expect(mockLLM.stream).not.toHaveBeenCalled();
 
-        expect(mockLLM.complete).toHaveBeenCalledTimes(1);
-        expect(mockLLM.stream).toHaveBeenCalledTimes(1);
-
-        expect(git("log", "-1", "--pretty=%s")).toBe(
+      expect(git("log", "-1", "--pretty=%s")).toBe(
         "feat(files): add available files",
-        );
+      );
 
-        expect(commitFiles("HEAD")).toEqual(validFiles);
+      expect(commitFiles("HEAD")).toEqual(validFiles);
 
-        expect(output).toContain("Skipped 1 file in mixed files: not stageable");
-        expect(output).toContain("Done — 1 commit created");
-        expect(output).toContain("(2 files  +2  -0)");
+      expect(output).toContain("Skipped 1 file in mixed files: not stageable");
+      expect(output).toContain("Done — 1 commit created");
+      expect(output).toContain("(2 files  +2  -0)");
 
-        expect(git("status", "--porcelain")).not.toContain(missingFile);
+      expect(git("status", "--porcelain")).not.toContain(missingFile);
     } finally {
-        logSpy.mockRestore();
+      logSpy.mockRestore();
     }
-    });
+  });
 });
 
 async function prepareSplitScenario(): Promise<{
@@ -382,16 +312,7 @@ async function prepareSplitScenario(): Promise<{
     },
   ];
 
-  mockCollectSummaries.mockReturnValue(
-    Array.from({ length: splitThreshold }, (_, i) => ({
-      file: `file-${i}.ts`,
-      status: "A",
-      additions: 1,
-      deletions: 0,
-      summary: `file-${i}.ts added`,
-    })),
-  );
-
+  mockCollectSummaries.mockReturnValue(createFileSummaries(splitThreshold));
   mockGroupChanges.mockResolvedValue({ groups });
 
   return {
@@ -411,6 +332,49 @@ async function createChangedFiles(): Promise<{ splitThreshold: number }> {
   return { splitThreshold };
 }
 
+function createFileSummaries(count: number): Array<{
+  file: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  summary: string;
+}> {
+  return Array.from({ length: count }, (_, i) => ({
+    file: `file-${i}.ts`,
+    status: "A",
+    additions: 1,
+    deletions: 0,
+    summary: `file-${i}.ts added`,
+  }));
+}
+
+function reasoningGenerationResult(): {
+  text: string;
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
+} {
+  return {
+    text: [
+      "TYPE: feat",
+      "SCOPE: auth",
+      "INTENT: add login support",
+      "WHY: NONE",
+      "RISK: low",
+      "BULLETS:",
+      "- add login function",
+      "- expose authentication entry point",
+    ].join("\n"),
+    usage: {
+      inputTokens: 100,
+      outputTokens: 50,
+      totalTokens: 150,
+    },
+  };
+}
+
 function commitGenerationResult(subject: string): {
   text: string;
   usage: {
@@ -427,6 +391,29 @@ function commitGenerationResult(subject: string): {
       totalTokens: 130,
     },
   };
+}
+
+function mockCompleteCommitMessages(...subjects: string[]): void {
+  mockLLM.complete.mockReset();
+
+  for (const subject of subjects) {
+    mockLLM.complete
+      .mockResolvedValueOnce(reasoningGenerationResult())
+      .mockResolvedValueOnce(commitGenerationResult(subject));
+  }
+}
+
+function readConsoleOutput(logSpy: MockInstance): string {
+  return stripAnsi(
+    logSpy.mock.calls
+      .flat()
+      .map(String)
+      .join("\n"),
+  );
+}
+
+function formatFileCount(count: number): string {
+  return `${count} ${count === 1 ? "file" : "files"}`;
 }
 
 function stripAnsi(value: string): string {
