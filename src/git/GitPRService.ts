@@ -2,6 +2,14 @@ import type { AppConfig } from "../config/config.js";
 import type { BranchPRSummary } from "../types/types.js";
 import type { GitService } from "./GitService.js";
 
+export type UnpushedCommitsInfo = {
+  hasUpstream: boolean;
+  branch: string;
+  upstream?: string;
+  count: number;
+  suggestedCommand?: string;
+};
+
 export class GitPRService {
   constructor(
     private readonly git: GitService,
@@ -112,5 +120,64 @@ export class GitPRService {
       summary.insertions > 0 ||
       summary.deletions > 0
     );
+  }
+
+  getUnpushedCommitsInfo(): UnpushedCommitsInfo {
+    const branch = this.git.runGitOrEmpty([
+      "rev-parse",
+      "--abbrev-ref",
+      "HEAD",
+    ]);
+
+    const upstream = this.git.runGitOrEmpty([
+      "rev-parse",
+      "--abbrev-ref",
+      "--symbolic-full-name",
+      "@{u}",
+    ]);
+
+    if (!upstream) {
+      return {
+        hasUpstream: false,
+        branch,
+        count: 0,
+        suggestedCommand: `git push -u origin ${branch}`,
+      };
+    }
+
+    const countRaw = this.git.runGitOrEmpty([
+      "rev-list",
+      "--count",
+      `${upstream}..HEAD`,
+    ]);
+
+    const count = Number(countRaw || 0);
+
+    return {
+      hasUpstream: true,
+      branch,
+      upstream,
+      count,
+      suggestedCommand: count > 0 ? "git push" : undefined,
+    };
+  }
+
+  pushCurrentBranch(setUpstream: boolean): void {
+    const branch = this.git.runGitOrEmpty([
+      "rev-parse",
+      "--abbrev-ref",
+      "HEAD",
+    ]);
+
+    if (setUpstream) {
+      this.git.runGit(["push", "-u", "origin", branch], {
+        maxBuffer: this.config.git.maxBufferBytes,
+      });
+      return;
+    }
+
+    this.git.runGit(["push"], {
+      maxBuffer: this.config.git.maxBufferBytes,
+    });
   }
 }
