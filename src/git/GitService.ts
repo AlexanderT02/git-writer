@@ -302,17 +302,4 @@ export class GitService {
       throw new Error(result.stderr || fallbackError);
     }
   }
-
-  getCurrentHeadSha(): string {
-    try {
-      return this.runGit(["rev-parse", "HEAD"]).trim();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to read current HEAD: ${message}`);
-    }
-  }
-
-  resetSoftTo(ref: string): void {
-    this.runGitWriteCommand(["reset", "--soft", ref], "Failed to reset commits");
-  }
 }
