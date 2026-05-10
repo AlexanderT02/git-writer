@@ -1,15 +1,15 @@
 import clipboard from "clipboardy";
 
 import type { AppConfig } from "../config/config.js";
-import type { LLM } from "../llm/LLM.js";
-import type { PRContext } from "../types/types.js";
 import type { PRContextBuilder } from "../context/PRContextBuilder.js";
-import type { GitPRService } from "../git/GitPRService.js";
-import type { GitHubCLIService } from "../git/GitHubCliService.js";
-import { PRGenerator } from "../generation/PRGenerator.js";
-import { UI } from "../ui/UI.js";
 import { GracefulExit, UserCancelledError } from "../errors.js";
+import { PRGenerator } from "../generation/PRGenerator.js";
+import type { GitHubCLIService } from "../git/GitHubCliService.js";
+import type { GitPRService } from "../git/GitPRService.js";
+import type { LLM } from "../llm/LLM.js";
 import type { UsageTracker } from "../stats/UsageTracker.js";
+import type { PRContext } from "../types/types.js";
+import { UI } from "../ui/UI.js";
 import type { UsageEntryBuilder } from "./App.js";
 
 export class PRFlow {
@@ -39,6 +39,8 @@ export class PRFlow {
       throw new GracefulExit(1);
     }
 
+    await this.handleUnpushedCommitsWarning();
+
     const selectedBaseBranch =
       baseBranch ??
       (await UI.selectBranch(baseSummaries, "Select base branch for PR:"));
@@ -52,7 +54,7 @@ export class PRFlow {
           if (preflightError.url) {
             UI.renderPRCreated(preflightError.url);
           } else {
-            console.log("\n  ✔ Pull request already exists.\n");
+            UI.renderPullRequestAlreadyExists();
           }
 
           throw new GracefulExit(0);
@@ -72,7 +74,7 @@ export class PRFlow {
     }
 
     if (!this.deps.gitPR.hasPRChangesAgainst(selectedBaseBranch)) {
-      console.log(`\n  ✖ No PR changes found against ${selectedBaseBranch}.\n`);
+      UI.renderNoPRChanges(selectedBaseBranch);
       throw new GracefulExit(1);
     }
 
@@ -124,7 +126,7 @@ export class PRFlow {
             if (result.url) {
               UI.renderPRCreated(result.url);
             } else {
-              console.log("\n  ✔ Pull request already exists.\n");
+              UI.renderPullRequestAlreadyExists();
             }
 
             throw new GracefulExit(0);
@@ -138,22 +140,42 @@ export class PRFlow {
         }
       }
 
-      UI.renderCancelled();
-      throw new UserCancelledError();
+      if (action === "cancel") {
+        UI.renderCancelled();
+        throw new UserCancelledError();
+      }
+
+      throw new Error(`Unknown PR action: ${action}`);
     }
+  }
+
+  private async handleUnpushedCommitsWarning(): Promise<void> {
+    const info = this.deps.gitPR.getUnpushedCommitsInfo();
+
+    if (info.hasUpstream && info.count === 0) {
+      return;
+    }
+
+    const action = await UI.unpushedCommitsWarningMenu(info);
+
+    if (action === "continue") {
+      return;
+    }
+
+    if (action === "push") {
+      this.deps.gitPR.pushCurrentBranch(!info.hasUpstream);
+      return;
+    }
+
+    UI.renderCancelled();
+    throw new UserCancelledError();
   }
 
   private renderPRFailure(result: {
     message: string;
     suggestedCommand?: string;
   }): never {
-    console.log(`\n  ✖ ${result.message}`);
-
-    if (result.suggestedCommand) {
-      console.log(`  → ${result.suggestedCommand}`);
-    }
-
-    console.log("");
+    UI.renderPRFailure(result);
     throw new GracefulExit(1);
   }
 }

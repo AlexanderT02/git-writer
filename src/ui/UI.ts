@@ -322,4 +322,77 @@ export class UI {
 
     console.log("");
   }
+
+  static renderPullRequestAlreadyExists(): void {
+    console.log("\n  ✔ Pull request already exists.\n");
+  }
+
+  static renderNoPRChanges(baseBranch: string): void {
+    console.log(`\n  ✖ No PR changes found against ${baseBranch}.\n`);
+  }
+
+  static renderPRFailure(result: {
+    message: string;
+    suggestedCommand?: string;
+  }): void {
+    console.log(`\n  ✖ ${result.message}`);
+
+    if (result.suggestedCommand) {
+      console.log(`  → ${result.suggestedCommand}`);
+    }
+
+    console.log("");
+  }
+
+  static async unpushedCommitsWarningMenu(input: {
+    hasUpstream: boolean;
+    branch: string;
+    upstream?: string;
+    count: number;
+    suggestedCommand?: string;
+  }): Promise<"push" | "continue" | "cancel"> {
+    console.log("");
+    console.log(chalk.yellow.bold("  ⚠ Unpushed commits detected"));
+    console.log("");
+
+    if (input.hasUpstream) {
+      console.log(
+        chalk.dim(
+          `  Current branch ${input.branch} has ${input.count} unpushed commit${
+            input.count !== 1 ? "s" : ""
+          } ahead of ${input.upstream}.`,
+        ),
+      );
+    } else {
+      console.log(
+        chalk.dim(
+          `  Current branch ${input.branch} has no upstream branch configured.`,
+        ),
+      );
+    }
+
+    if (input.suggestedCommand) {
+      console.log(chalk.dim(`  Suggested: ${input.suggestedCommand}`));
+    }
+
+    console.log("");
+
+    return select({
+      message: "How do you want to continue?",
+      choices: [
+        {
+          name: input.hasUpstream ? "Push now" : "Push and set upstream",
+          value: "push",
+        },
+        {
+          name: "Continue to preview without pushing",
+          value: "continue",
+        },
+        {
+          name: "Cancel",
+          value: "cancel",
+        },
+      ],
+    });
+  }
 }

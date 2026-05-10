@@ -63,6 +63,22 @@ type CreatePullRequestMock = Mock<
 
 type PrActionMenuMock = Mock<() => Promise<"copy" | "create" | "cancel">>;
 
+type UnpushedCommitsInfo = {
+  hasUpstream: boolean;
+  branch: string;
+  upstream?: string;
+  count: number;
+  suggestedCommand?: string;
+};
+
+type UnpushedCommitsWarningMenuMock = Mock<
+  (info: UnpushedCommitsInfo) => Promise<"push" | "continue" | "cancel">
+>;
+
+const mockUnpushedCommitsWarningMenu = vi.fn(
+  async (_info: UnpushedCommitsInfo) => "continue" as const,
+) as UnpushedCommitsWarningMenuMock;
+
 const mockLLM = {
   complete: vi.fn() as CompleteMock,
   stream: vi.fn() as StreamMock,
@@ -112,6 +128,11 @@ vi.mock("../src/ui/UI.js", () => ({
     renderCopied: vi.fn(),
     renderCancelled: vi.fn(),
 
+    unpushedCommitsWarningMenu: mockUnpushedCommitsWarningMenu,
+    renderPullRequestAlreadyExists: vi.fn(),
+    renderNoPRChanges: vi.fn(),
+    renderPRFailure: vi.fn(),
+
     render: vi.fn(),
     actionMenu: vi.fn(),
     refineInput: vi.fn(),
@@ -156,6 +177,8 @@ describe("PR flow integration", () => {
 
     mockLLM.complete.mockReset();
     mockLLM.stream.mockReset();
+    mockUnpushedCommitsWarningMenu.mockReset();
+    mockUnpushedCommitsWarningMenu.mockResolvedValue("continue");
 
     mockClipboardWrite.mockReset();
     mockGetPreflightError.mockReset();
