@@ -7,8 +7,8 @@
  * produces a usable commit message.
  */
 import { describe, it, expect, vi } from "vitest";
-import { CommitContextBuilder } from "../src/context/CommitContextBuilder.js";
-import { CommitGenerator } from "../src/generation/CommitGenerator.js";
+import { CommitContextBuilder } from "../../src/context/CommitContextBuilder.js";
+import { CommitGenerator } from "../../src/generation/CommitGenerator.js";
 import { createTestConfig, createMockGitService, createMockLLM } from "./helpers.js";
 
 function setupPipeline(opts: {

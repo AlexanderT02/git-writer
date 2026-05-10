@@ -6,11 +6,10 @@ import { ChangeGrouper } from "../generation/ChangeGrouper.js";
 import type { CommitContextBuilder } from "../context/CommitContextBuilder.js";
 import type { GitService } from "../git/GitService.js";
 import type { LLM } from "../llm/LLM.js";
-import type { FileGroup } from "../types/types.js";
+import type { CommitStats, FileGroup } from "../types/types.js";
 import { UI } from "../ui/UI.js";
 import { GracefulExit } from "../errors.js";
 import type { UsageTracker } from "../stats/UsageTracker.js";
-import { estimateCommitTokens } from "../llm/estimate/generationEstimate.js";
 import type { UsageEntryBuilder } from "./App.js";
 
 export type FastCommitResult =
@@ -62,7 +61,7 @@ export class FastCommitFlow {
   async run(options: FastCommitRunOptions = {}): Promise<FastCommitResult> {
     const exitOnComplete = options.exitOnComplete ?? true;
 
-    this.deps.git.stageFiles(["."]);
+    this.deps.git.stageAllFiles();
 
     const files = this.deps.git.getStagedFileNames();
 
@@ -91,29 +90,24 @@ export class FastCommitFlow {
   }
 
   private async runSingle(files: string): Promise<FastCommitResult> {
-    this.assertFileLimit(files);
-
     const ctx = this.deps.commitContext.build(files);
-
-    const estimatedTokens = estimateCommitTokens(
-      this.deps.commitGenerator,
-      files,
-      ctx,
-    );
-
-    this.assertTokenLimit(estimatedTokens);
-
     const startedAt = Date.now();
     const generated = await this.deps.commitGenerator.generate(files, ctx);
     const durationMs = Date.now() - startedAt;
 
-    this.commit(generated.message, {
+    const stats = this.commit(generated.message, {
       files,
       diff: ctx._diff ?? "",
       usedTokens: generated.usage.totalTokens,
       usage: generated.usage,
       durationMs,
     });
+
+    UI.renderCommitCreated(stats);
+
+    console.log(
+      chalk.green.bold(`\n  ✔ Done ${this.formatStats(stats)}\n`),
+    );
 
     return { status: "committed", commitCount: 1 };
   }
@@ -135,7 +129,7 @@ export class FastCommitFlow {
     }
 
     console.log(
-      chalk.cyan(`\n   Found ${summaries.length} changed files — grouping...\n`),
+      chalk.cyan(`\n  Grouping ${summaries.length} changed files...\n`),
     );
 
     const { groups } = await grouper.group(summaries);
@@ -143,26 +137,26 @@ export class FastCommitFlow {
     this.renderGroupingSummary(groups);
 
     let commitCount = 0;
+    let totalStats: CommitStats = {
+      files: "0",
+      insertions: 0,
+      deletions: 0,
+    };
 
     for (let i = 0; i < groups.length; i++) {
       const group = groups[i]!;
 
-      console.log(
-        chalk.dim(`\n   Commit ${i + 1}/${groups.length}: ${group.label}`),
-      );
-
-      this.deps.git.stageFiles(group.files);
-
+      const failedFiles = this.stageGroupFiles(group);
       const files = this.deps.git.getStagedFileNames();
 
       if (!files.trim()) {
         console.log(
-          chalk.yellow(
-            `  ⚠ Group "${group.label}" has no stageable files — skipping`,
-          ),
+          chalk.yellow(`  ⚠ Skipped ${group.label}: no stageable files`),
         );
         continue;
       }
+
+      this.renderSkippedGroupFiles(group, failedFiles);
 
       const ctx = this.deps.commitContext.build(files);
 
@@ -170,7 +164,14 @@ export class FastCommitFlow {
       const generated = await this.deps.commitGenerator.generate(files, ctx);
       const durationMs = Date.now() - startedAt;
 
-      this.commit(generated.message, {
+      const subject = generated.message.split("\n")[0] ?? group.label;
+
+      console.log(
+        chalk.dim(`\n  Commit ${i + 1}/${groups.length}: `) +
+          chalk.white(subject),
+      );
+
+      const stats = this.commit(generated.message, {
         files,
         diff: ctx._diff ?? "",
         usage: generated.usage,
@@ -178,18 +179,9 @@ export class FastCommitFlow {
         durationMs,
       });
 
-      const stats = this.deps.git.getLastCommitStats();
-      const statsStr = stats
-        ? chalk.dim(
-          `(${chalk.cyan(stats.files)} files  ${chalk.green(
-            "+" + stats.insertions,
-          )}  ${chalk.red("-" + stats.deletions)})`,
-        )
-        : "";
+      totalStats = this.addStats(totalStats, stats);
 
-      console.log(
-        chalk.green(`  ✔ ${generated.message.split("\n")[0]}  ${statsStr}`),
-      );
+      UI.renderCommitCreated(stats);
 
       commitCount++;
     }
@@ -198,7 +190,7 @@ export class FastCommitFlow {
       chalk.green.bold(
         `\n  ✔ Done — ${commitCount} commit${
           commitCount !== 1 ? "s" : ""
-        } created\n`,
+        } created ${this.formatStats(totalStats)}\n`,
       ),
     );
 
@@ -211,7 +203,7 @@ export class FastCommitFlow {
     return `${message}\n\nrefs ${this.deps.issueRefs.join(", ")}`;
   }
 
-  private commit(message: string, meta: UsageMeta): void {
+  private commit(message: string, meta: UsageMeta): CommitStats | null {
     const finalMessage = this.appendIssueRefs(message);
 
     this.deps.git.createCommit(finalMessage);
@@ -228,7 +220,7 @@ export class FastCommitFlow {
       }),
     );
 
-    UI.renderCommitCreated(this.deps.git.getLastCommitStats());
+    return this.deps.git.getLastCommitStats();
   }
 
   private renderGroupingSummary(groups: FileGroup[]): void {
@@ -246,43 +238,65 @@ export class FastCommitFlow {
             }`,
           ),
       );
-
-      for (const file of group.files.slice(0, 5)) {
-        console.log(chalk.dim(`     ${file}`));
-      }
-
-      if (group.files.length > 5) {
-        console.log(chalk.dim(`     ...and ${group.files.length - 5} more`));
-      }
     }
 
     console.log("");
   }
 
-  private assertFileLimit(files: string): void {
-    const fileCount = files.split("\n").filter(Boolean).length;
-    const limit = this.deps.config.context.fastModeFileLimit;
+  private formatStats(stats?: CommitStats | null): string {
+    if (!stats) return "";
 
-    if (fileCount <= limit) return;
-
-    console.log(
-      `\n  ✖ Fast mode aborted: ${fileCount} staged files exceed the limit of ${limit}.\n`,
+    return chalk.dim(
+      `(${chalk.cyan(stats.files)} files  ${chalk.green(
+        `+${stats.insertions}`,
+      )}  ${chalk.red(`-${stats.deletions}`)})`,
     );
-    console.log("  → Use interactive mode to stage fewer files.\n");
-
-    throw new GracefulExit(1);
   }
 
-  private assertTokenLimit(estimatedTokens: number): void {
-    const limit = this.deps.config.context.fastModeTokenLimit;
+  private addStats(
+    total: CommitStats,
+    stats?: CommitStats | null,
+  ): CommitStats {
+    if (!stats) return total;
 
-    if (estimatedTokens <= limit) return;
+    return {
+      files: String(this.toNumber(total.files) + this.toNumber(stats.files)),
+      insertions: this.toNumber(total.insertions) + this.toNumber(stats.insertions),
+      deletions: this.toNumber(total.deletions) + this.toNumber(stats.deletions),
+    };
+  }
+
+  private toNumber(value: string | number): number {
+    if (typeof value === "number") return value;
+
+    const parsed = Number(value);
+
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private stageGroupFiles(group: FileGroup): string[] {
+    const failedFiles: string[] = [];
+
+    for (const file of group.files) {
+      try {
+        this.deps.git.stageFiles([file]);
+      } catch {
+        failedFiles.push(file);
+      }
+    }
+
+    return failedFiles;
+  }
+
+  private renderSkippedGroupFiles(group: FileGroup, failedFiles: string[]): void {
+    if (failedFiles.length === 0) return;
 
     console.log(
-      `\n  ✖ Fast mode aborted: estimated ${estimatedTokens} tokens exceed the limit of ${limit}.\n`,
+      chalk.yellow(
+        `  ⚠ Skipped ${failedFiles.length} file${
+          failedFiles.length !== 1 ? "s" : ""
+        } in ${group.label}: not stageable`,
+      ),
     );
-    console.log("  → Use interactive mode or stage fewer/lighter changes.\n");
-
-    throw new GracefulExit(1);
   }
 }

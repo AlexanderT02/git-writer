@@ -381,19 +381,40 @@ ${sections}`;
     const messagePrompt = this.buildMessagePrompt(files, context, reasoning);
 
     const streamSpinner = ora("Generating commit message...").start();
+    const renderer = UI.createCommitMessageLiveRenderer(this.config);
 
+    let streamedText = "";
     let result: Awaited<ReturnType<typeof this.ai.stream>>;
 
     try {
       result = await this.withRetry(() =>
         this.ai.stream(messagePrompt, (text) => {
           streamSpinner.stop();
-          UI.render(text, this.config);
+
+          if (!text.trim()) return;
+
+          if (text.startsWith(streamedText)) {
+            // Provider sends full snapshot.
+            streamedText = text;
+          } else {
+            // Provider sends delta.
+            streamedText += text;
+          }
+
+          const sanitized = this.sanitizeCommitMessage(streamedText);
+
+          if (sanitized.trim()) {
+            renderer.render(sanitized);
+          }
         }),
       );
     } finally {
       streamSpinner.stop();
     }
+
+    const message = this.sanitizeCommitMessage(result.text || streamedText);
+
+    renderer.end(message);
 
     return {
       message: this.sanitizeCommitMessage(result.text),

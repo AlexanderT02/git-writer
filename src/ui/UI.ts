@@ -2,6 +2,7 @@ import chalk from "chalk";
 import { editor, input, select, Separator } from "@inquirer/prompts";
 import type { AppConfig } from "../config/config.js";
 import { marked } from "marked";
+import readline from "node:readline";
 import TerminalRenderer from "marked-terminal";
 import type {
   BranchPRSummary,
@@ -35,18 +36,104 @@ export class UI {
 
     console.log("");
   }
-  static render(msg: string, config: AppConfig): void {
-    if (config.ui.clearScreen) {
-      console.clear();
-    }
 
+  static createCommitMessageLiveRenderer(config: AppConfig): {
+    render: (message: string) => void;
+    end: (message?: string) => void;
+  } {
     const border = chalk.dim("─".repeat(config.ui.borderWidth));
 
-    console.log("\n" + border);
-    console.log(chalk.bold(`  ${config.ui.generatedCommitTitle}`));
-    console.log(border + "\n");
-    console.log(msg || chalk.dim(config.ui.generatingPlaceholder));
-    console.log("\n" + border);
+    let started = false;
+    let renderedLines = 0;
+    let lastMessage = "";
+    let ended = false;
+
+    const visibleLineCount = (text: string): number => {
+      return Math.max(1, text.split("\n").length);
+    };
+
+    const buildFrame = (message: string): string => {
+      const body = message.trim() || chalk.dim(config.ui.generatingPlaceholder);
+
+      return [
+        "",
+        border,
+        chalk.bold(`  ${config.ui.generatedCommitTitle}`),
+        border,
+        "",
+        body,
+        "",
+        border,
+      ].join("\n");
+    };
+
+    const frameLineCount = (message: string): number => {
+      const body = message.trim() || config.ui.generatingPlaceholder;
+
+      // buildFrame has:
+      // 1 leading empty line
+      // 1 top border
+      // 1 title
+      // 1 title border
+      // 1 empty line
+      // N body lines
+      // 1 empty line
+      // 1 bottom border
+      return 7 + visibleLineCount(body);
+    };
+
+    const clearPreviousFrame = (): void => {
+      if (!started || renderedLines <= 0) return;
+
+      readline.moveCursor(process.stdout, 0, -renderedLines);
+      readline.cursorTo(process.stdout, 0);
+      readline.clearScreenDown(process.stdout);
+    };
+
+    const draw = (message: string): void => {
+      const normalized = message.trim();
+
+      if (!normalized) return;
+      if (normalized === lastMessage) return;
+
+      clearPreviousFrame();
+
+      process.stdout.write(buildFrame(normalized) + "\n");
+
+      renderedLines = frameLineCount(normalized);
+      lastMessage = normalized;
+      started = true;
+    };
+
+    return {
+      render(message: string): void {
+        if (ended) return;
+        draw(message);
+      },
+
+      end(message?: string): void {
+        if (ended) return;
+
+        const finalMessage = (message ?? lastMessage).trim();
+
+        if (finalMessage && finalMessage !== lastMessage) {
+          draw(finalMessage);
+        }
+
+        if (!started) {
+          process.stdout.write(buildFrame("") + "\n");
+          renderedLines = frameLineCount("");
+          started = true;
+        }
+
+        ended = true;
+      },
+    };
+  }
+
+  static renderCommitMessage(msg: string, config: AppConfig): void {
+    const renderer = UI.createCommitMessageLiveRenderer(config);
+    renderer.end(msg);
   }
 
   static renderPRPreview(

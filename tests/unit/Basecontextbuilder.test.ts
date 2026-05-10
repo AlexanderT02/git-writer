@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createTestConfig, createMockGitService } from "./helpers.js";
-import { CommitContextBuilder } from "../src/context/CommitContextBuilder.js";
-import type { GitService } from "../src/git/GitService.js";
+import { CommitContextBuilder } from "../../src/context/CommitContextBuilder.js";
+import type { GitService } from "../../src/git/GitService.js";
 
 /**
  * We test BaseContextBuilder behavior through CommitContextBuilder since

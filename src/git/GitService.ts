@@ -25,6 +25,10 @@ export class GitService {
     return options.trim === false ? output.replace(/\r?\n$/, "") : output.trim();
   }
 
+  stageAllFiles() {
+    this.stageFiles(["."]);
+  }
+
   runGitOrEmpty(args: string[], options: GitOptions = {}): string {
     try {
       return this.runGit(args, options);
@@ -290,7 +294,7 @@ export class GitService {
       throw new Error(result.stderr || fallbackError);
     }
   }
-  
+
   getCommitSummariesSince(baseSha: string): CreatedCommitSummary[] {
     const output = this.runGitOrEmpty([
       "log",
