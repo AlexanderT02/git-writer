@@ -161,7 +161,7 @@ export class FastCommitFlow {
       const ctx = this.deps.commitContext.build(files);
 
       const startedAt = Date.now();
-      const generated = await this.deps.commitGenerator.generate(files, ctx);
+      const generated = await this.deps.commitGenerator.generate(files, ctx, { render: false });
       const durationMs = Date.now() - startedAt;
 
       const subject = generated.message.split("\n")[0] ?? group.label;

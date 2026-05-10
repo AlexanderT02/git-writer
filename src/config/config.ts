@@ -148,8 +148,8 @@ export const config: AppConfig = {
 
   // Auto-split grouping for fast mode with many files.
   grouping: {
-    splitThreshold: 4,
-    maxGroups: 10,
+    splitThreshold: 2,
+    maxGroups: 15,
   },
 
   // Commit message output constraints.

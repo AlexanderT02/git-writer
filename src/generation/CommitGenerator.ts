@@ -360,10 +360,13 @@ ${sections}`;
   async generate(
     files: string,
     context: CommitContext,
+    options: { render?: boolean } = {},
   ): Promise<CommitGenerationResult> {
+    const render = options.render ?? true;
+
     const reasoningPrompt = this.buildReasoningPrompt(files, context);
 
-    const spinner = ora("Analysing intent...").start();
+    const spinner = render ? ora("Analysing intent...").start() : undefined;
 
     let reasoningResult: Awaited<ReturnType<typeof this.ai.complete>>;
 
@@ -372,7 +375,7 @@ ${sections}`;
         this.ai.complete(reasoningPrompt),
       );
     } finally {
-      spinner.stop();
+      spinner?.stop();
     }
 
     const reasoning = reasoningResult.text;
@@ -380,8 +383,13 @@ ${sections}`;
 
     const messagePrompt = this.buildMessagePrompt(files, context, reasoning);
 
-    const streamSpinner = ora("Generating commit message...").start();
-    const renderer = UI.createCommitMessageLiveRenderer(this.config);
+    const streamSpinner = render
+      ? ora("Generating commit message...").start()
+      : undefined;
+
+    const renderer = render
+      ? UI.createCommitMessageLiveRenderer(this.config)
+      : undefined;
 
     let streamedText = "";
     let result: Awaited<ReturnType<typeof this.ai.stream>>;
@@ -389,17 +397,19 @@ ${sections}`;
     try {
       result = await this.withRetry(() =>
         this.ai.stream(messagePrompt, (text) => {
-          streamSpinner.stop();
+          streamSpinner?.stop();
 
           if (!text.trim()) return;
 
           if (text.startsWith(streamedText)) {
-            // Provider sends full snapshot.
+          // Provider sends full snapshot.
             streamedText = text;
           } else {
-            // Provider sends delta.
+          // Provider sends delta.
             streamedText += text;
           }
+
+          if (!renderer) return;
 
           const sanitized = this.sanitizeCommitMessage(streamedText);
 
@@ -409,15 +419,15 @@ ${sections}`;
         }),
       );
     } finally {
-      streamSpinner.stop();
+      streamSpinner?.stop();
     }
 
     const message = this.sanitizeCommitMessage(result.text || streamedText);
 
-    renderer.end(message);
+    renderer?.end(message);
 
     return {
-      message: this.sanitizeCommitMessage(result.text),
+      message,
       usage: {
         reasoning: reasoningUsage,
         generation: result.usage,
