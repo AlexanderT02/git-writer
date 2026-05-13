@@ -1,16 +1,22 @@
 import { execFileSync, spawnSync } from "child_process";
 import chalk from "chalk";
 import type { AppConfig } from "../config/config.js";
-import type {
-  BranchContext,
-  CommitStats,
-} from "../types/types.js";
+import type { BranchContext, CommitStats } from "../types/types.js";
 
 type GitOptions = {
   trim?: boolean;
   maxBuffer?: number;
 };
 
+/**
+ * Central Git CLI adapter for reading repository state and performing writes.
+ *
+ * Notes:
+ * - uses execFileSync/spawnSync without a shell
+ * - disables interactive Git credential prompts
+ * - supports unborn HEAD repositories before the first commit
+ * - filters non-stageable paths before running git add
+ */
 export class GitService {
   constructor(private readonly config: AppConfig) {}
 
@@ -19,13 +25,10 @@ export class GitService {
       encoding: "utf8",
       maxBuffer: options.maxBuffer ?? this.config.git.maxBufferBytes,
       stdio: ["ignore", "pipe", "ignore"],
+      env: this.gitEnv(),
     });
 
     return options.trim === false ? output.replace(/\r?\n$/, "") : output.trim();
-  }
-
-  stageAllFiles() {
-    this.stageFiles(["."]);
   }
 
   runGitOrEmpty(args: string[], options: GitOptions = {}): string {
@@ -36,8 +39,16 @@ export class GitService {
     }
   }
 
+  stageAllFiles(): void {
+    this.stageFiles(["."]);
+  }
+
   getCurrentBranch(): string {
-    return this.runGit(["rev-parse", "--abbrev-ref", "HEAD"]);
+    return (
+      this.runGitOrEmpty(["symbolic-ref", "--short", "HEAD"]) ||
+      this.runGitOrEmpty(["rev-parse", "--abbrev-ref", "HEAD"]) ||
+      "HEAD"
+    );
   }
 
   getCurrentBranchContext(): BranchContext {
@@ -81,42 +92,26 @@ export class GitService {
   }
 
   getUntrackedFiles(): string[] {
-    const raw = this.runGitOrEmpty(["ls-files", "--others", "--exclude-standard"]);
-    return raw ? raw.split("\n").filter(Boolean) : [];
+    return this.lines(
+      this.runGitOrEmpty(["ls-files", "--others", "--exclude-standard"]),
+    );
   }
 
   getFileDiffHunkHeaders(file: string, staged = false): string[] {
-    const args = staged
-      ? ["diff", "--cached", "-U0", "--", file]
-      : ["diff", "-U0", "--", file];
-
-    const raw = this.runGitOrEmpty(args);
-
-    return raw
-      .split("\n")
+    return this.lines(this.getFileDiff(file, staged, ["-U0"]))
       .filter((line) => line.startsWith("@@"))
-      .map((line) => {
-        const match = line.match(/@@.*@@\s*(.*)/);
-        return match?.[1]?.trim() ?? "";
-      })
+      .map((line) => line.match(/@@.*@@\s*(.*)/)?.[1]?.trim() ?? "")
       .filter(Boolean)
       .slice(0, 5);
   }
 
   getFileDiffKeyLines(file: string, staged = false): string[] {
-    const args = staged
-      ? ["diff", "--cached", "--", file]
-      : ["diff", "--", file];
-
-    const raw = this.runGitOrEmpty(args);
-
-    return raw
-      .split("\n")
+    return this.lines(this.getFileDiff(file, staged))
       .filter(
         (line) =>
-          (line.startsWith("+") || line.startsWith("-")) &&
-        !line.startsWith("+++") &&
-        !line.startsWith("---"),
+          /^[+-]/.test(line) &&
+          !line.startsWith("+++") &&
+          !line.startsWith("---"),
       )
       .map((line) => line.trim())
       .filter((line) => line.length > 3)
@@ -126,15 +121,36 @@ export class GitService {
       .slice(0, 10);
   }
 
+  hasCommits(): boolean {
+    return this.gitHasOutput(["rev-parse", "--verify", "HEAD"]);
+  }
+
+  hasStagedFiles(): boolean {
+    return Boolean(this.runGitOrEmpty(["diff", "--cached", "--name-only"]));
+  }
+
   resetStagedFiles(): void {
-    this.runGitWriteCommand(["reset", "HEAD", "--quiet"], "Failed to unstage files");
+    if (!this.hasStagedFiles()) return;
+
+    this.runGitWriteCommand(
+      this.hasCommits()
+        ? ["reset", "HEAD", "--quiet"]
+        : ["rm", "--cached", "-r", "--quiet", "--", "."],
+      "Failed to unstage files",
+    );
   }
 
   unstageFiles(files: string[]): void {
-    if (files.length === 0) return;
+    const indexedFiles = files.filter((file) =>
+      this.gitHasOutput(["ls-files", "--cached", "--", file]),
+    );
+
+    if (indexedFiles.length === 0) return;
 
     this.runGitWriteCommand(
-      ["reset", "HEAD", "--quiet", "--", ...files],
+      this.hasCommits()
+        ? ["reset", "HEAD", "--quiet", "--", ...indexedFiles]
+        : ["rm", "--cached", "--quiet", "--", ...indexedFiles],
       "Failed to unstage files",
     );
   }
@@ -152,9 +168,7 @@ export class GitService {
   }
 
   getStagedFileSummaryLines(): string {
-    return this.getStagedNameStatus()
-      .split("\n")
-      .filter(Boolean)
+    return this.lines(this.getStagedNameStatus())
       .map((line) => {
         const [status, ...file] = line.trim().split(/\s+/);
         return `${status}: ${file.join(" ")}`;
@@ -164,9 +178,8 @@ export class GitService {
 
   getStagedDiffForPrompt(): string {
     const raw = this.getStagedDiff();
-    const lines = raw.split("\n");
 
-    if (lines.length <= this.config.git.largeDiffLineLimit) {
+    if (this.lines(raw).length <= this.config.git.largeDiffLineLimit) {
       return raw;
     }
 
@@ -177,8 +190,7 @@ export class GitService {
       this.getStagedDiff(["--stat"]),
       "",
       "[CHANGED SYMBOLS & HUNKS]",
-      this.getStagedDiff(["--unified=0"])
-        .split("\n")
+      this.lines(this.getStagedDiff(["--unified=0"]))
         .filter((line) => line.startsWith("+++") || line.startsWith("@@"))
         .slice(0, this.config.git.largeDiffHeaderLimit)
         .join("\n"),
@@ -186,12 +198,7 @@ export class GitService {
   }
 
   refExists(ref: string): boolean {
-    try {
-      this.runGit(["cat-file", "-e", ref]);
-      return true;
-    } catch {
-      return false;
-    }
+    return this.gitExitCodeIsZero(["cat-file", "-e", ref]);
   }
 
   readFileFromRef(ref: string): string {
@@ -204,9 +211,7 @@ export class GitService {
     return this.runGitOrEmpty(["log", "--oneline", `-${n}`, "--no-merges"]);
   }
 
-  getRecentCommitStyleHints(
-    n = this.config.git.recentStyleCommitCount,
-  ): string {
+  getRecentCommitStyleHints(n = this.config.git.recentStyleCommitCount): string {
     const commits = this.runGitOrEmpty([
       "log",
       "--format=%s",
@@ -214,18 +219,14 @@ export class GitService {
       "--no-merges",
     ]);
 
-    if (!commits) return "";
-
     const types = new Set<string>();
     const scopes = new Set<string>();
 
-    for (const line of commits.split("\n")) {
+    for (const line of this.lines(commits)) {
       const match = line.match(/^(\w+)(?:\(([^)]+)\))?:/);
-
       if (!match) continue;
 
       types.add(match[1] ?? "");
-
       if (match[2]) scopes.add(match[2]);
     }
 
@@ -256,9 +257,9 @@ export class GitService {
   }
 
   getChangedSymbolsFromStagedDiff(): string {
-    const raw = this.getStagedDiff(["--unified=0"]);
     const symbols = new Set<string>();
     const hunkHeader = /^@@[^@]+@@\s*(.+)$/gm;
+    const raw = this.getStagedDiff(["--unified=0"]);
 
     let match: RegExpExecArray | null;
 
@@ -276,15 +277,80 @@ export class GitService {
   }
 
   stageFiles(files: string[]): void {
-    this.runGitWriteCommand(["add", "--", ...files], "Failed to stage files");
+    const stageableFiles = files.filter((file) => this.isStageablePath(file));
+    if (stageableFiles.length === 0) return;
+
+    this.runGitWriteCommand(
+      ["add", "--", ...stageableFiles],
+      "Failed to stage files",
+    );
   }
 
   createCommit(message: string): void {
-    this.runGitWriteCommand(["commit", "-F", "-"], "Failed to create commit", message);
+    this.runGitWriteCommand(
+      ["commit", "-F", "-"],
+      "Failed to create commit",
+      message,
+    );
   }
 
   private getStagedDiff(args: string[] = []): string {
-    return this.runGitOrEmpty(["diff", "--cached", ...args]);
+    return this.runGitOrEmpty([...this.stagedDiffBaseArgs(), ...args]);
+  }
+
+  private stagedDiffBaseArgs(): string[] {
+    return this.hasCommits()
+      ? ["diff", "--cached"]
+      : ["diff", "--cached", "--root"];
+  }
+
+  private getFileDiff(file: string, staged: boolean, extraArgs: string[] = []): string {
+    return this.runGitOrEmpty([
+      "diff",
+      ...(staged ? ["--cached"] : []),
+      ...extraArgs,
+      "--",
+      file,
+    ]);
+  }
+
+  private isStageablePath(file: string): boolean {
+    return (
+      this.gitHasOutput(["ls-files", "--error-unmatch", "--", file]) ||
+      Boolean(
+        this.runGitOrEmpty([
+          "ls-files",
+          "--others",
+          "--exclude-standard",
+          "--",
+          file,
+        ]),
+      )
+    );
+  }
+
+  private gitHasOutput(args: string[]): boolean {
+    return Boolean(this.runGitOrEmpty(args));
+  }
+
+  private gitExitCodeIsZero(args: string[]): boolean {
+    try {
+      this.runGit(args);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private lines(value: string): string[] {
+    return value.split("\n").filter(Boolean);
+  }
+
+  private gitEnv(): NodeJS.ProcessEnv {
+    return {
+      ...process.env,
+      GIT_TERMINAL_PROMPT: "0",
+    };
   }
 
   private runGitWriteCommand(
@@ -296,10 +362,16 @@ export class GitService {
       input,
       encoding: "utf8",
       stdio: input ? ["pipe", "ignore", "pipe"] : ["ignore", "pipe", "pipe"],
+      env: this.gitEnv(),
     });
 
+    if (result.error) {
+      throw new Error(`${fallbackError}: ${result.error.message}`);
+    }
+
     if (result.status !== 0) {
-      throw new Error(result.stderr || fallbackError);
+      const stderr = result.stderr?.trim();
+      throw new Error(stderr ? `${fallbackError}: ${stderr}` : fallbackError);
     }
   }
 }
