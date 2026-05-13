@@ -229,33 +229,71 @@ describe("GitService", () => {
 
     it("returns semantic summary for large diffs", () => {
       const lines = Array.from({ length: 1000 }, (_, i) => `line ${i}`);
-      // First call returns the big diff, second returns --stat, third returns --unified=0
-      let callCount = 0;
-      mockedExecFileSync.mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) return lines.join("\n") + "\n";
-        if (callCount === 2) return " src/foo.ts | 500 +++\n";
-        return "+++  src/foo.ts\n@@ -1 +1 @@\n";
+      const largeDiff = `${lines.join("\n")}\n`;
+
+      mockedExecFileSync.mockImplementation((_cmd, args) => {
+        const joined = Array.isArray(args) ? args.join(" ") : "";
+
+        if (joined === "rev-parse --verify HEAD") {
+          return "abc123\n";
+        }
+
+        if (joined === "diff --cached") {
+          return largeDiff;
+        }
+
+        if (joined === "diff --cached --stat") {
+          return " src/foo.ts | 500 +++\n";
+        }
+
+        if (joined === "diff --cached --unified=0") {
+          return "+++  src/foo.ts\n@@ -1 +1 @@\n";
+        }
+
+        return "";
       });
+
       const svc = createService();
       const result = svc.getStagedDiffForPrompt();
+
       expect(result).toContain("[CHANGED FILES]");
+      expect(result).toContain("src/foo.ts | 500 +++");
       expect(result).toContain("[CHANGED SYMBOLS & HUNKS]");
     });
   });
 
   describe("refExists", () => {
     it("returns true when ref exists", () => {
-      mockedExecFileSync.mockReturnValue("");
+      mockedExecFileSync.mockImplementation((_cmd, args) => {
+        if (gitArgs(args) === "cat-file -e HEAD") {
+          return "";
+        }
+
+        throw new Error("unexpected git command");
+      });
+
       const svc = createService();
-      expect(svc.refExists("HEAD:file.ts")).toBe(true);
+
+      expect(svc.refExists("HEAD")).toBe(true);
     });
 
     it("returns false when ref does not exist", () => {
-      mockedExecFileSync.mockImplementation(() => { throw new Error("not found"); });
+      mockedExecFileSync.mockImplementation((_cmd, args) => {
+        if (gitArgs(args) === "cat-file -e missing-ref") {
+          throw new Error("not found");
+        }
+
+        throw new Error("unexpected git command");
+      });
+
       const svc = createService();
-      expect(svc.refExists("HEAD:missing.ts")).toBe(false);
+
+      expect(svc.refExists("missing-ref")).toBe(false);
     });
+
+    function gitArgs(args: unknown): string {
+      return Array.isArray(args) ? args.join(" ") : "";
+    }
   });
 
   describe("getStagedFileSummaryLines", () => {
