@@ -3,6 +3,7 @@ import {
   createPrompt,
   isDownKey,
   isEnterKey,
+  isNumberKey,
   isSpaceKey,
   isUpKey,
   useKeypress,
@@ -10,7 +11,7 @@ import {
   usePrefix,
   useState,
 } from "@inquirer/core";
-import type { DiffStats, StatusEntry } from "../types/types.js";
+import type { DiffStats, FileGroup, StatusEntry } from "../types/types.js";
 
 const STATUS: Record<
   string,
@@ -135,6 +136,7 @@ interface TreeCheckboxConfig {
   rows: TreeRow[];
   pageSize: number;
   loop: boolean;
+  groups?: FileGroup[];
   getWarnings?: (selected: string[]) => string[];
 }
 
@@ -174,6 +176,7 @@ export const treeCheckbox = createPrompt<string[], TreeCheckboxConfig>(
     const rows = config.rows;
     const pageSize = config.pageSize;
     const loop = config.loop;
+    const groups = config.groups ?? [];
     const firstSelectable = getFirstSelectableIndex(rows);
 
     const [status, setStatus] = useState<"idle" | "done">("idle");
@@ -206,6 +209,30 @@ export const treeCheckbox = createPrompt<string[], TreeCheckboxConfig>(
           next.delete(row.value);
         } else {
           next.add(row.value);
+        }
+
+        setSelected(next);
+        return;
+      }
+
+      if (isNumberKey(key) && groups.length > 0) {
+        const idx = Number(key.name) - 1;
+        const group = groups[idx];
+
+        if (!group) return;
+
+        const next = new Set(selected);
+
+        // Toggle: if all files in the group are selected, deselect them;
+        // otherwise select all of them.
+        const allSelected = group.files.every((f) => next.has(f));
+
+        for (const file of group.files) {
+          if (allSelected) {
+            next.delete(file);
+          } else {
+            next.add(file);
+          }
         }
 
         setSelected(next);
@@ -299,6 +326,7 @@ export function buildTreeRows(
   files: StatusEntry[],
   stagedExists: boolean,
   diffStats: Map<string, DiffStats>,
+  groups?: FileGroup[],
 ): TreeRow[] {
   const choices: TreeRow[] = [
     {
@@ -316,6 +344,30 @@ export function buildTreeRows(
       render: ({ marker }) =>
         `${marker} ${chalk.gray("↳ use already staged files")}`,
     });
+  }
+
+  if (groups && groups.length > 0) {
+    choices.push({ type: "separator", name: " " });
+    choices.push({
+      type: "separator",
+      name: chalk.dim("  Suggested groups (press 1-9 to toggle)"),
+    });
+
+    for (let i = 0; i < groups.length && i < 9; i++) {
+      const group = groups[i]!;
+      const key = chalk.bold.magenta(`${i + 1}`);
+      const label = chalk.magenta(group.label);
+      const fileList = chalk.dim(
+        group.files.length <= 3
+          ? group.files.map((f) => f.split("/").pop()).join(", ")
+          : `${group.files.slice(0, 2).map((f) => f.split("/").pop()).join(", ")} +${group.files.length - 2} more`,
+      );
+
+      choices.push({
+        type: "separator",
+        name: `  ${key}  ${label}  ${fileList}`,
+      });
+    }
   }
 
   const root = buildTree(files);

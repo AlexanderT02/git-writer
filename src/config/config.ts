@@ -44,6 +44,8 @@ export interface AppConfig {
     loop: boolean;
     message: string;
     help: string;
+    /** Minimum file count before group suggestions appear */
+    groupingThreshold: number;
   };
 
   commit: {
@@ -135,6 +137,7 @@ export const config: AppConfig = {
     loop: false,
     message: "Select files to stage",
     help: "↑/↓ move · Space select · Enter confirm",
+    groupingThreshold: 4,
   },
 
   // Commit message output constraints.

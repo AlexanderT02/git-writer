@@ -5,6 +5,7 @@ import { GracefulExit } from "../errors.js";
 import type { GitService } from "../git/GitService.js";
 import type { DiffStats, StatusEntry } from "../types/types.js";
 import { UI } from "../ui/UI.js";
+import { groupFiles } from "./fileGrouper.js";
 import {
   buildTreeRows,
   normalizePath,
@@ -86,7 +87,6 @@ export class StagingService {
       return true;
     });
   }
-
   private detectRenames(entries: StatusEntry[]): StatusEntry[] {
     const gitRenames = this.parseGitRenames();
 
@@ -264,6 +264,28 @@ export class StagingService {
     }
   }
 
+  collectHunkHeaders(files: StatusEntry[]): Map<string, string[]> {
+    const headers = new Map<string, string[]>();
+
+    for (const file of files) {
+      const path = normalizePath(file.file);
+
+      if (file.code === "D" || file.code === "?" || file.code === "R") {
+        continue;
+      }
+
+      const staged = this.git.getFileDiffHunkHeaders(path, true);
+      const unstaged = this.git.getFileDiffHunkHeaders(path, false);
+      const combined = [...new Set([...staged, ...unstaged])];
+
+      if (combined.length > 0) {
+        headers.set(path, combined);
+      }
+    }
+
+    return headers;
+  }
+
   countTextFileLines(file: string): number {
     try {
       const stat = statSync(file);
@@ -309,10 +331,15 @@ export class StagingService {
     }
 
     const diffStats = this.getDiffStats(files);
+    const hunkHeaders = this.collectHunkHeaders(files);
+    const groups = groupFiles(
+      { files, diffStats, hunkHeaders },
+      this.config.staging.groupingThreshold,
+    );
 
     UI.renderStagingSummary(files, Boolean(staged), diffStats);
 
-    const choices = buildTreeRows(files, Boolean(staged), diffStats);
+    const choices = buildTreeRows(files, Boolean(staged), diffStats, groups);
 
     const selected = await treeCheckbox({
       message: this.config.staging.message,
@@ -320,6 +347,7 @@ export class StagingService {
       rows: choices,
       pageSize: this.config.staging.pageSize,
       loop: this.config.staging.loop,
+      groups,
       getWarnings: (selectedFiles) =>
         this.getSelectionWarnings(selectedFiles, diffStats),
     });
