@@ -7,6 +7,7 @@ import TerminalRenderer from "marked-terminal";
 import type {
   BranchPRSummary,
   CommitStats,
+  DiffStats,
   StatusEntry,
   UiAction,
 } from "../types/types.js";
@@ -252,6 +253,7 @@ export class UI {
   static renderStagingSummary(
     files: StatusEntry[],
     stagedExists: boolean,
+    diffStats?: Map<string, DiffStats>,
   ): void {
     const total = files.length;
 
@@ -259,7 +261,7 @@ export class UI {
     console.log(
       chalk.bold("  Stage changes") +
         chalk.dim(`  ${total} file${total !== 1 ? "s" : ""} `) +
-        formatStatusSummary(files),
+        formatStatusSummary(files, diffStats),
     );
 
     if (stagedExists) {

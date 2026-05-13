@@ -91,6 +91,36 @@ export class GitService {
     return this.runGitOrEmpty(["diff", "--name-status"]);
   }
 
+  /**
+   * Detect renames with similarity index using git diff -M.
+   * Returns lines like "R085\told/path\tnew/path" for staged + unstaged.
+   */
+  getRenameStatus(): string {
+    const staged = this.runGitOrEmpty([
+      ...this.stagedDiffBaseArgs(),
+      "-M",
+      "--name-status",
+    ]);
+    const unstaged = this.runGitOrEmpty(["diff", "-M", "--name-status"]);
+
+    return [staged, unstaged].filter(Boolean).join("\n");
+  }
+
+  /**
+   * Count the number of diff hunks for a file.
+   */
+  getFileHunkCount(file: string, staged = false): number {
+    const diff = this.runGitOrEmpty([
+      "diff",
+      ...(staged ? ["--cached"] : []),
+      "-U0",
+      "--",
+      file,
+    ]);
+
+    return this.lines(diff).filter((line) => line.startsWith("@@")).length;
+  }
+
   getUntrackedFiles(): string[] {
     return this.lines(
       this.runGitOrEmpty(["ls-files", "--others", "--exclude-standard"]),
