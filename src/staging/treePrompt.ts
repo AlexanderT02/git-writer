@@ -274,15 +274,25 @@ export function buildTree(files: StatusEntry[]): TreeNode {
   return root;
 }
 
-export function formatStats(add: number, del: number): string {
+export function formatStats(stats: DiffStats): string {
+  if (stats.binary) {
+    return chalk.dim("[bin]");
+  }
+
   const parts: string[] = [];
 
-  if (add > 0) parts.push(chalk.green(`+${add}`));
-  if (del > 0) parts.push(chalk.red(`-${del}`));
+  if (stats.add > 0) parts.push(chalk.green(`+${stats.add}`));
+  if (stats.del > 0) parts.push(chalk.red(`-${stats.del}`));
 
-  return parts.length
-    ? chalk.dim("(") + parts.join(chalk.dim("/")) + chalk.dim(")")
-    : "";
+  if (!parts.length) return "";
+
+  const lineInfo = chalk.dim("(") + parts.join(chalk.dim("/")) + chalk.dim(")");
+
+  if (stats.hunks && stats.hunks > 1) {
+    return lineInfo + chalk.dim(` ${stats.hunks}h`);
+  }
+
+  return lineInfo;
 }
 
 export function buildTreeRows(
@@ -359,14 +369,18 @@ function flattenNode(
     const path = normalizePath(file.file);
     const { icon, color } = getStatus(file.code);
     const stats = diffStats.get(path);
-    const statsStr = stats
-      ? " " + formatStats(stats.add, stats.del)
-      : "";
+    const statsStr = stats ? " " + formatStats(stats) : "";
 
-    const label =
-      file.oldFile && file.code === "R"
-        ? `${normalizePath(file.oldFile)} → ${path}`
-        : file.basename;
+    const partialMarker = file.partial ? chalk.yellow("½ ") : "";
+
+    let label: string;
+
+    if (file.oldFile && file.code === "R") {
+      const sim = file.similarity != null ? chalk.dim(` ${file.similarity}%`) : "";
+      label = `${normalizePath(file.oldFile)} → ${path}${sim}`;
+    } else {
+      label = file.basename;
+    }
 
     choices.push({
       type: "choice",
@@ -375,6 +389,7 @@ function flattenNode(
         chalk.dim(prefix + connector) +
     marker +
     " " +
+    partialMarker +
     color(`${icon} ${label}`) +
     statsStr,
     });
@@ -383,6 +398,7 @@ function flattenNode(
 
 export function formatStatusSummary(
   files: StatusEntry[],
+  diffStats?: Map<string, DiffStats>,
 ): string {
   const counts: Record<string, number> = {};
 
@@ -395,6 +411,27 @@ export function formatStatusSummary(
   for (const [code, count] of Object.entries(counts)) {
     const { color } = getStatus(code);
     parts.push(color(`${count}${STATUS[code]?.icon ?? code}`));
+  }
+
+  if (diffStats) {
+    let totalAdd = 0;
+    let totalDel = 0;
+
+    for (const stat of diffStats.values()) {
+      if (stat.binary) continue;
+      totalAdd += stat.add;
+      totalDel += stat.del;
+    }
+
+    if (totalAdd > 0 || totalDel > 0) {
+      parts.push(
+        chalk.dim("·") +
+        " " +
+        chalk.green(`+${totalAdd}`) +
+        chalk.dim("/") +
+        chalk.red(`-${totalDel}`),
+      );
+    }
   }
 
   return parts.join(chalk.dim(" "));

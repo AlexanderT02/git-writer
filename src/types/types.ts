@@ -37,6 +37,10 @@ export interface StatusEntry {
   code: GitStatusCode;
   basename?: string;
   oldFile?: string;
+  /** true when the file has both staged and unstaged changes */
+  partial?: boolean;
+  /** rename similarity percentage (0–100) from git diff -M */
+  similarity?: number;
 }
 
 export interface StagedEntry {
@@ -47,6 +51,8 @@ export interface StagedEntry {
 export interface DiffStats {
   add: number;
   del: number;
+  binary?: boolean;
+  hunks?: number;
 }
 
 export interface BranchContext {
