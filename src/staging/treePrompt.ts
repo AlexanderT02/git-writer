@@ -11,7 +11,7 @@ import {
   usePrefix,
   useState,
 } from "@inquirer/core";
-import type { DiffStats, FileGroup, StatusEntry } from "../types/types.js";
+import type { DiffStats, FileGroup, StatusEntry } from "../types/Types.js";
 
 const STATUS: Record<
   string,

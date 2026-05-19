@@ -1,6 +1,6 @@
 import { spawnSync } from "child_process";
 import type { GitService } from "./GitService.js";
-import type { PullRequestCreateResult } from "../types/types.js";
+import type { PullRequestCreateResult } from "../types/Types.js";
 export type CommandResult = {
   status: number | null;
   stdout: string;

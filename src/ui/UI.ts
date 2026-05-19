@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import { editor, input, select, Separator } from "@inquirer/prompts";
-import type { AppConfig } from "../config/config.js";
+import type { AppConfig } from "../config/Config.js";
 import { marked } from "marked";
 import readline from "node:readline";
 import TerminalRenderer from "marked-terminal";
@@ -10,8 +10,8 @@ import type {
   DiffStats,
   StatusEntry,
   UiAction,
-} from "../types/types.js";
-import { formatStatusSummary } from "../staging/treePrompt.js";
+} from "../types/Types.js";
+import { formatStatusSummary } from "../staging/TreePrompt.js";
 marked.setOptions({
   renderer: new TerminalRenderer(),
 });

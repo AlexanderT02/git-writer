@@ -1,4 +1,4 @@
-import type { AppConfig } from "../config/config.js";
+import type { AppConfig } from "../config/Config.js";
 import type { GitService } from "../git/GitService.js";
 
 export type ContextLevel = -1 | 0 | 1 | 2;

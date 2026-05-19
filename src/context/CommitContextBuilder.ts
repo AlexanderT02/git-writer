@@ -1,9 +1,9 @@
-import type { AppConfig } from "../config/config.js";
+import type { AppConfig } from "../config/Config.js";
 import type {
   CommitContext,
   FileContextResult,
   StagedEntry,
-} from "../types/types.js";
+} from "../types/Types.js";
 import type { GitService } from "../git/GitService.js";
 import {
   BaseContextBuilder,

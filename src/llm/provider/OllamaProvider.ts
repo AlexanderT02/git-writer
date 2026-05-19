@@ -1,5 +1,5 @@
-import type { LLMProviderConfig } from "../../config/config.js";
-import type { LLMResult, LLMUsage } from "../../types/types.js";
+import type { LLMProviderConfig } from "../../config/Config.js";
+import type { LLMResult, LLMUsage } from "../../types/Types.js";
 import { BaseLLMProvider } from "../LLM.js";
 
 type OllamaGenerateResponse = {

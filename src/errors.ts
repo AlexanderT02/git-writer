@@ -1,4 +1,4 @@
-import type { LLMProviderName } from "./config/config.js";
+import type { LLMProviderName } from "./config/Config.js";
 
 export class GracefulExit extends Error {
   constructor(

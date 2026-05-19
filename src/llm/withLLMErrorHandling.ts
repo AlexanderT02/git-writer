@@ -1,5 +1,5 @@
-import type { LLMProviderName } from "../config/config.js";
-import { LLMProviderError } from "../errors.js";
+import type { LLMProviderName } from "../config/Config.js";
+import { LLMProviderError } from "../Errors.js";
 
 type ErrorLike = {
   status?: number;

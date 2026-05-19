@@ -7,7 +7,7 @@ import {
   writeFileSync,
 } from "fs";
 import { execFileSync } from "child_process";
-import type { UsageEntry } from "../types/types.js";
+import type { UsageEntry } from "../types/Types.js";
 import { dirname, join } from "path";
 
 export interface UsageData {

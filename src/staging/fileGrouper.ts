@@ -1,5 +1,5 @@
-import type { DiffStats, FileGroup, StatusEntry } from "../types/types.js";
-import { normalizePath } from "./treePrompt.js";
+import type { DiffStats, FileGroup, StatusEntry } from "../types/Types.js";
+import { normalizePath } from "./TreePrompt.js";
 
 // ---------------------------------------------------------------------------
 // File grouping — clusters changed files into logical commit candidates.

@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from "child_process";
 import chalk from "chalk";
-import type { AppConfig } from "../config/config.js";
-import type { BranchContext, CommitStats } from "../types/types.js";
+import type { AppConfig } from "../config/Config.js";
+import type { BranchContext, CommitStats } from "../types/Types.js";
 
 type GitOptions = {
   trim?: boolean;

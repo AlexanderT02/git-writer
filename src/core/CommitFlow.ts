@@ -1,12 +1,12 @@
 import clipboard from "clipboardy";
 
-import { config } from "../config/config.js";
+import { config } from "../config/Config.js";
 import type { CommitGenerator } from "../generation/CommitGenerator.js";
 import type { CommitContextBuilder } from "../context/CommitContextBuilder.js";
 import type { GitService } from "../git/GitService.js";
 import type { StagingService } from "../staging/StagingService.js";
 import { UI } from "../ui/UI.js";
-import { GracefulExit, UserCancelledError } from "../errors.js";
+import { GracefulExit, UserCancelledError } from "../Errors.js";
 import type { UsageTracker } from "../stats/UsageTracker.js";
 import type { GenerationUsage, UsageEntryBuilder } from "./App.js";
 

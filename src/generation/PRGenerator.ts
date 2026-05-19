@@ -1,9 +1,9 @@
 import ora from "ora";
-import type { PRContext, PRGenerationResult } from "../types/types.js";
-import type { AppConfig } from "../config/config.js";
+import type { PRContext, PRGenerationResult } from "../types/Types.js";
+import type { AppConfig } from "../config/Config.js";
 import type { LLM } from "../llm/LLM.js";
-import { DefaultPRPromptBuilder } from "../prompts/prPrompts.js";
-import type { PRPromptBuilder } from "../prompts/promptBuilder.js";
+import { DefaultPRPromptBuilder } from "../prompts/PrPrompts.js";
+import type { PRPromptBuilder } from "../prompts/PromptBuilder.js";
 
 export class PRGenerator {
   extraInstruction = "";

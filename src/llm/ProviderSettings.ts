@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
-import { config } from "../config/config.js";
-import type { LLMProviderName } from "../config/config.js";
+import { config } from "../config/Config.js";
+import type { LLMProviderName } from "../config/Config.js";
 
 type StoredSettings = {
   provider?: LLMProviderName;
@@ -12,7 +12,7 @@ type StoredSettings = {
 };
 
 const CONFIG_DIR = join(homedir(), ".git-writer");
-const CONFIG_FILE = join(CONFIG_DIR, "config.json");
+const CONFIG_FILE = join(CONFIG_DIR, "Config.json");
 
 export const PROVIDER_CONFIG_FILE = CONFIG_FILE;
 

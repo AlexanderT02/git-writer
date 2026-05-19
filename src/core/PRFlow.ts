@@ -1,14 +1,14 @@
 import clipboard from "clipboardy";
 
-import type { AppConfig } from "../config/config.js";
+import type { AppConfig } from "../config/Config.js";
 import type { PRContextBuilder } from "../context/PRContextBuilder.js";
-import { GracefulExit, UserCancelledError } from "../errors.js";
+import { GracefulExit, UserCancelledError } from "../Errors.js";
 import { PRGenerator } from "../generation/PRGenerator.js";
 import type { GitHubCLIService } from "../git/GitHubCliService.js";
 import type { GitPRService } from "../git/GitPRService.js";
 import type { LLM } from "../llm/LLM.js";
 import type { UsageTracker } from "../stats/UsageTracker.js";
-import type { PRContext, PullRequestCreateResult } from "../types/types.js";
+import type { PRContext, PullRequestCreateResult } from "../types/Types.js";
 import { UI } from "../ui/UI.js";
 import type { UsageEntryBuilder } from "./App.js";
 

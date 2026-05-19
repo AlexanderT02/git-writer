@@ -1,6 +1,6 @@
-import type { LLMProviderName } from "../config/config.js";
-import type { LLMResult } from "../types/types.js";
-import { withLLMErrorHandling } from "./withLLMErrorHandling.js";
+import type { LLMProviderName } from "../config/Config.js";
+import type { LLMResult } from "../types/Types.js";
+import { withLLMErrorHandling } from "./WithLLMErrorHandling.js";
 
 export interface LLM {
   complete(prompt: string): Promise<LLMResult>;

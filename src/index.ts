@@ -4,12 +4,12 @@ import { execFileSync } from "child_process";
 import { fileURLToPath } from "url";
 import chalk from "chalk";
 import { Command, InvalidArgumentError } from "commander";
-import { config } from "./config/config.js";
+import { config } from "./config/Config.js";
 import { App } from "./core/App.js";
-import { GracefulExit } from "./errors.js";
+import { GracefulExit } from "./Errors.js";
 import { StatsRenderer } from "./stats/StatsRenderer.js";
 import { ProviderSettings } from "./llm/ProviderSettings.js";
-import type { LLMProviderName } from "./config/config.js";
+import type { LLMProviderName } from "./config/Config.js";
 import { realpathSync } from "fs";
 import { createRequire } from "module";
 
@@ -188,7 +188,7 @@ export function createProgram(): Command {
       console.log("");
       console.log(
         chalk.gray(
-          "Hint: To use different models, add a new provider profile in src/config/config.ts.",
+          "Hint: To use different models, add a new provider profile in src/config/Config.ts.",
         ),
       );
       console.log("");
@@ -232,21 +232,15 @@ function runCli(): void {
 
   program.parseAsync(process.argv).catch((error: unknown) => {
     if (error instanceof GracefulExit) {
-      if (error.message) {
-        console.log(chalk.yellow(`\n${error.message}\n`));
+      if (error.code !== 0 && error.message) {
+        console.error(chalk.red(`\n✖ ${error.message}\n`));
       }
 
       process.exit(error.code);
     }
 
-    if (error instanceof InvalidArgumentError) {
-      console.error(chalk.red(`\n✖ ${error.message}\n`));
-      process.exit(2);
-    }
-
     const message = error instanceof Error ? error.message : String(error);
-    console.error(chalk.red(`\n✖ Unexpected error: ${message}\n`));
-
+    console.error(chalk.red(`\n✖ ${message}\n`));
     process.exit(1);
   });
 }

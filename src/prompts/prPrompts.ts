@@ -1,5 +1,5 @@
-import type { AppConfig } from "../config/config.js";
-import type { PRPromptBuilder, PRPromptInput } from "./promptBuilder.js";
+import type { AppConfig } from "../config/Config.js";
+import type { PRPromptBuilder, PRPromptInput } from "./PromptBuilder.js";
 
 export class DefaultPRPromptBuilder implements PRPromptBuilder {
   buildReasoningPrompt(

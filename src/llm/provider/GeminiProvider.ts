@@ -1,7 +1,7 @@
-import type { LLMProviderConfig } from "../../config/config.js";
+import type { LLMProviderConfig } from "../../config/Config.js";
 import { BaseLLMProvider } from "../LLM.js";
-import type { LLMResult, LLMUsage } from "../../types/types.js";
-import { LLMProviderError } from "../../errors.js";
+import type { LLMResult, LLMUsage } from "../../types/Types.js";
+import { LLMProviderError } from "../../Errors.js";
 
 type GeminiPart = {
   text?: string;

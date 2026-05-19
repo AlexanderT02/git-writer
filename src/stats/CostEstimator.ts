@@ -1,4 +1,4 @@
-import type { UsageEntry, UsageLLMCall } from "../types/types.js";
+import type { UsageEntry, UsageLLMCall } from "../types/Types.js";
 
 export type TokenPrice = {
   inputPerMillion: number;

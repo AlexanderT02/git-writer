@@ -2,7 +2,7 @@ import type {
   AppConfig,
   LLMProviderConfig,
   LLMProviderName,
-} from "../config/config.js";
+} from "../config/Config.js";
 import type { LLM } from "./LLM.js";
 import { OllamaProvider } from "./provider/OllamaProvider.js";
 import { OpenAIProvider } from "./provider/OpenAIProvider.js";

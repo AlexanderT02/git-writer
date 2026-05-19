@@ -1,7 +1,7 @@
 import chalk from "chalk";
 import { UsageTracker } from "./UsageTracker.js";
-import type { UsageEntry } from "../types/types.js";
-import { GracefulExit } from "../errors.js";
+import type { UsageEntry } from "../types/Types.js";
+import { GracefulExit } from "../Errors.js";
 import { CostEstimator } from "./CostEstimator.js";
 
 type AggregateStats = {

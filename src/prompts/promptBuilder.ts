@@ -1,5 +1,5 @@
-import type { AppConfig } from "../config/config.js";
-import type { CommitContext, PRContext } from "../types/types.js";
+import type { AppConfig } from "../config/Config.js";
+import type { CommitContext, PRContext } from "../types/Types.js";
 
 export interface CommitPromptInput {
   files: string;

@@ -1,16 +1,16 @@
 import { readFileSync, statSync } from "fs";
 
-import type { AppConfig } from "../config/config.js";
-import { GracefulExit } from "../errors.js";
+import type { AppConfig } from "../config/Config.js";
+import { GracefulExit } from "../Errors.js";
 import type { GitService } from "../git/GitService.js";
-import type { DiffStats, StatusEntry } from "../types/types.js";
+import type { DiffStats, StatusEntry } from "../types/Types.js";
 import { UI } from "../ui/UI.js";
-import { groupFiles } from "./fileGrouper.js";
+import { groupFiles } from "./FileGrouper.js";
 import {
   buildTreeRows,
   normalizePath,
   treeCheckbox,
-} from "./treePrompt.js";
+} from "./TreePrompt.js";
 
 export class StagingService {
   constructor(

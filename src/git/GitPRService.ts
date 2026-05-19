@@ -1,5 +1,5 @@
-import type { AppConfig } from "../config/config.js";
-import type { BranchPRSummary } from "../types/types.js";
+import type { AppConfig } from "../config/Config.js";
+import type { BranchPRSummary } from "../types/Types.js";
 import type { GitService } from "./GitService.js";
 
 export type UnpushedCommitsInfo = {

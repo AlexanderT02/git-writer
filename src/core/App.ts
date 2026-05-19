@@ -1,5 +1,5 @@
-import type { LLMProviderConfig, LLMProviderName } from "../config/config.js";
-import { config } from "../config/config.js";
+import type { LLMProviderConfig, LLMProviderName } from "../config/Config.js";
+import { config } from "../config/Config.js";
 import { CommitGenerator } from "../generation/CommitGenerator.js";
 import { CommitContextBuilder } from "../context/CommitContextBuilder.js";
 import { PRContextBuilder } from "../context/PRContextBuilder.js";
@@ -7,7 +7,7 @@ import { GitService } from "../git/GitService.js";
 import { createLLMProvider } from "../llm/Factory.js";
 import { StagingService } from "../staging/StagingService.js";
 import type { LLM } from "../llm/LLM.js";
-import type { PRContext, UsageEntry } from "../types/types.js";
+import type { PRContext, UsageEntry } from "../types/Types.js";
 import { GitPRService } from "../git/GitPRService.js";
 import { GitHubCLIService } from "../git/GitHubCliService.js";
 import { UsageTracker } from "../stats/UsageTracker.js";

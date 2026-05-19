@@ -1,12 +1,12 @@
 import ora from "ora";
 import { UI } from "../ui/UI.js";
-import type { AppConfig } from "../config/config.js";
-import type { CommitContext, CommitGenerationResult } from "../types/types.js";
+import type { AppConfig } from "../config/Config.js";
+import type { CommitContext, CommitGenerationResult } from "../types/Types.js";
 import type { LLM } from "../llm/LLM.js";
 import {
   DefaultCommitPromptBuilder,
-} from "../prompts/commitPrompts.js";
-import type { CommitPromptBuilder } from "../prompts/promptBuilder.js";
+} from "../prompts/CommitPrompts.js";
+import type { CommitPromptBuilder } from "../prompts/PromptBuilder.js";
 
 export class CommitGenerator {
   extraInstruction = "";

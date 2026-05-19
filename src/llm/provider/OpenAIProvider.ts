@@ -1,8 +1,8 @@
 import OpenAI from "openai";
-import type { LLMProviderConfig, LLMProviderName } from "../../config/config.js";
-import type { LLMResult, LLMUsage } from "../../types/types.js";
+import type { LLMProviderConfig, LLMProviderName } from "../../config/Config.js";
+import type { LLMResult, LLMUsage } from "../../types/Types.js";
 import { BaseLLMProvider } from "../LLM.js";
-import { requireProviderEnv } from "../withLLMErrorHandling.js";
+import { requireProviderEnv } from "../WithLLMErrorHandling.js";
 
 export class OpenAIProvider extends BaseLLMProvider {
   protected readonly provider: LLMProviderName = "openai";

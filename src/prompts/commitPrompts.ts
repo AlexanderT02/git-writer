@@ -1,8 +1,8 @@
-import type { AppConfig } from "../config/config.js";
+import type { AppConfig } from "../config/Config.js";
 import type {
   CommitPromptBuilder,
   CommitPromptInput,
-} from "./promptBuilder.js";
+} from "./PromptBuilder.js";
 
 export class DefaultCommitPromptBuilder implements CommitPromptBuilder {
   buildReasoningPrompt(
