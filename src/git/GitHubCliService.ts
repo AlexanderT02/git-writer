@@ -1,6 +1,7 @@
 import { spawnSync } from "child_process";
 import type { GitService } from "./GitService.js";
 import type {
+  ExistingPullRequest,
   PullRequestCreateResult,
   PullRequestUpdateResult,
 } from "../types/Types.js";
@@ -126,6 +127,39 @@ export class GitHubCLIService {
     return result.stdout || null;
   }
 
+  getExistingPullRequest(baseBranch: string): ExistingPullRequest | null {
+    const normalizedBaseBranch = this.normalizeBaseBranch(baseBranch);
+
+    const result = this.run("gh", [
+      "pr",
+      "view",
+      "--base",
+      normalizedBaseBranch,
+      "--json",
+      "url,title,body",
+    ]);
+
+    if (result.status !== 0 || !result.stdout) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(result.stdout) as Partial<ExistingPullRequest>;
+
+      if (!parsed.url || !parsed.title) {
+        return null;
+      }
+
+      return {
+        url: parsed.url,
+        title: parsed.title,
+        body: parsed.body ?? "",
+      };
+    } catch {
+      return null;
+    }
+  }
+
   getPreflightError(baseBranch: string): PullRequestCreateResult | null {
     const readinessError = this.getReadinessError();
 
@@ -215,13 +249,25 @@ export class GitHubCLIService {
     const readinessError = this.getReadinessError();
 
     if (readinessError) {
-      return readinessError;
+      if (readinessError.status === "gh_missing") {
+        return readinessError;
+      }
+
+      if (readinessError.status === "gh_unauthenticated") {
+        return readinessError;
+      }
     }
 
     const upstreamError = this.getCurrentBranchUpstreamError();
 
     if (upstreamError) {
-      return upstreamError;
+      if (upstreamError.status === "not_pushed") {
+        return upstreamError;
+      }
+
+      if (upstreamError.status === "unpushed_commits") {
+        return upstreamError;
+      }
     }
 
     const existingPrUrl = this.getExistingPullRequestUrl(baseBranch);
