@@ -87,6 +87,9 @@ type ClipboardWriteMock = Mock<(text: string) => Promise<void>>;
 type GetPreflightErrorMock = Mock<
   (baseBranch: string) => GitHubPreflightError
 >;
+type GetExistingPullRequestMock = Mock<
+  (baseBranch: string) => { url: string; title: string; body: string } | null
+>;
 
 type CreatePullRequestMock = Mock<
   (
@@ -122,6 +125,9 @@ const mockClipboardWrite = vi.fn(
 const mockGetPreflightError = vi.fn(
   (_baseBranch: string) => null,
 ) as GetPreflightErrorMock;
+const mockGetExistingPullRequest = vi.fn(
+  (_baseBranch: string) => null,
+) as GetExistingPullRequestMock;
 
 const mockCreatePullRequestFromCurrentBranch = vi.fn(
   (_baseBranch: string, _title: string, _body: string) => ({
@@ -168,6 +174,7 @@ vi.mock("clipboardy", () => ({
 
 vi.mock("../src/git/GitHubCliService.js", () => ({
   GitHubCLIService: vi.fn().mockImplementation(() => ({
+    getExistingPullRequest: mockGetExistingPullRequest,
     getPreflightError: mockGetPreflightError,
     createPullRequestFromCurrentBranch: mockCreatePullRequestFromCurrentBranch,
     updatePullRequestFromCurrentBranch: mockUpdatePullRequestFromCurrentBranch,
@@ -238,6 +245,7 @@ describe("PR flow integration", () => {
 
     mockClipboardWrite.mockReset();
     mockGetPreflightError.mockReset();
+    mockGetExistingPullRequest.mockReset();
     mockCreatePullRequestFromCurrentBranch.mockReset();
     mockUpdatePullRequestFromCurrentBranch.mockReset();
     mockPrActionMenu.mockReset();
@@ -254,6 +262,7 @@ describe("PR flow integration", () => {
     mockRenderPRFailure.mockReset();
 
     mockGetPreflightError.mockReturnValue(null);
+    mockGetExistingPullRequest.mockReturnValue(null);
 
     mockCreatePullRequestFromCurrentBranch.mockReturnValue({
       status: "created",

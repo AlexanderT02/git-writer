@@ -174,6 +174,12 @@ export type PullRequestUpdateResult =
     message: string;
   };
 
+export type ExistingPullRequest = {
+  url: string;
+  title: string;
+  body: string;
+};
+
 export interface CompactFileSummary {
   path: string;
   status: string;

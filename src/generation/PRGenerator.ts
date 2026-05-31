@@ -124,6 +124,108 @@ export class PRGenerator {
     };
   }
 
+  async generateFromExisting(
+    prContext: PRContext,
+    existing: { title: string; body: string },
+  ): Promise<PRGenerationResult> {
+    const spinner = ora("Analyzing existing PR and new changes...").start();
+
+    let reasoningResult: Awaited<ReturnType<typeof this.ai.complete>>;
+    let outputResult: Awaited<ReturnType<typeof this.ai.complete>>;
+
+    try {
+      reasoningResult = await this.withRetry(() =>
+        this.ai.complete(
+          this.buildUpdateReasoningPrompt(prContext, existing.title, existing.body),
+        ),
+      );
+
+      spinner.text = "Updating PR Markdown incrementally...";
+
+      outputResult = await this.withRetry(() =>
+        this.ai.complete(
+          this.buildUpdateMessagePrompt(
+            reasoningResult.text,
+            existing.title,
+            existing.body,
+          ),
+        ),
+      );
+    } finally {
+      spinner.stop();
+    }
+
+    const parsed = this.parsePROutput(outputResult.text);
+
+    return {
+      ...parsed,
+      usage: {
+        reasoning: reasoningResult.usage,
+        generation: outputResult.usage,
+        totalTokens:
+          (reasoningResult.usage?.totalTokens ?? 0) +
+          (outputResult.usage?.totalTokens ?? 0),
+      },
+    };
+  }
+
+  private buildUpdateReasoningPrompt(
+    context: PRContext,
+    existingTitle: string,
+    existingBody: string,
+  ): string {
+    return `You are updating an existing GitHub pull request after additional commits were pushed.
+
+Your goal is NOT to rewrite from scratch.
+Preserve existing intent and structure unless the new changes clearly require updates.
+
+Existing PR title:
+${existingTitle}
+
+Existing PR body:
+${existingBody || "NONE"}
+
+New git context since branch state changed:
+${this.buildReasoningPrompt(context)}
+
+Return concise notes with:
+- What must be added or changed in the existing PR text
+- Which existing sections can stay unchanged
+- Any updated risks/testing notes based only on visible evidence
+- Whether the title should stay or be adjusted`;
+  }
+
+  private buildUpdateMessagePrompt(
+    updateReasoning: string,
+    existingTitle: string,
+    existingBody: string,
+  ): string {
+    return `Update the existing PR title/body using the reasoning below.
+
+Important:
+- Keep existing content where still accurate
+- Add only necessary updates from newly pushed changes
+- Avoid rephrasing unchanged sections for style only
+- Do not invent tests, results, issues, migrations, or risks
+- Return full updated output in the required format
+
+Return exactly:
+TITLE:
+<updated title>
+
+BODY:
+<full updated markdown body>
+
+Existing title:
+${existingTitle}
+
+Existing body:
+${existingBody || "NONE"}
+
+Update reasoning:
+${updateReasoning || "NONE"}`;
+  }
+
   parsePROutput(output: string): { title: string; description: string } {
     const cleaned = this.cleanMarkdown(output);
 

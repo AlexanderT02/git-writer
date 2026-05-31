@@ -60,9 +60,16 @@ export class PRFlow {
 
     const prContext = this.buildContext(selectedBaseBranch);
     const prGenerator = new PRGenerator(this.deps.ai, this.deps.config);
+    const existingPullRequest =
+      this.deps.githubCli.getExistingPullRequest(selectedBaseBranch);
 
     const startedAt = Date.now();
-    const generatedPR = await prGenerator.generate(prContext);
+    const generatedPR = existingPullRequest
+      ? await prGenerator.generateFromExisting(prContext, {
+        title: existingPullRequest.title,
+        body: existingPullRequest.body,
+      })
+      : await prGenerator.generate(prContext);
     const durationMs = Date.now() - startedAt;
 
     const { title, description } = generatedPR;
