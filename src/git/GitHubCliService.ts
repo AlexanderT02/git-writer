@@ -12,6 +12,9 @@ export type CommandResult = {
 };
 
 export class GitHubCLIService {
+  private static readonly CONTEXT_HEAD_RE =
+    /<!--\s*gw-context-head:\s*([0-9a-f]{7,40})\s*-->/i;
+
   constructor(private readonly git: GitService) {}
 
   private run(command: string, args: string[]): CommandResult {
@@ -33,6 +36,10 @@ export class GitHubCLIService {
 
   private extractUrl(text: string): string | null {
     return text.match(/https:\/\/github\.com\/[^\s]+/)?.[0] ?? null;
+  }
+
+  extractContextHeadSha(body: string): string | undefined {
+    return body.match(GitHubCLIService.CONTEXT_HEAD_RE)?.[1];
   }
 
   isGitHubCliInstalled(): boolean {
@@ -145,6 +152,7 @@ export class GitHubCLIService {
         url: parsed.url,
         title: parsed.title,
         body: parsed.body ?? "",
+        contextHeadSha: this.extractContextHeadSha(parsed.body ?? ""),
       };
     } catch {
       return null;

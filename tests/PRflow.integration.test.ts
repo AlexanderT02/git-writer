@@ -335,7 +335,10 @@ describe("PR flow integration", () => {
     );
 
     expect(mockClipboardWrite).toHaveBeenCalledTimes(1);
-    expect(mockClipboardWrite).toHaveBeenCalledWith(expectedClipboardMarkdown());
+    const copied = mockClipboardWrite.mock.calls[0]?.[0] as string;
+    expect(copied).toContain("Add authentication flow");
+    expect(copied).toContain(expectedPRBody());
+    expect(copied).toMatch(/<!--\s*gw-context-head:\s*[0-9a-f]{7,40}\s*-->/i);
 
     expect(mockRenderCopied).toHaveBeenCalledWith("Copied PR to clipboard");
   });
@@ -362,7 +365,7 @@ describe("PR flow integration", () => {
     expect(mockCreatePullRequestFromCurrentBranch).toHaveBeenCalledWith(
       "main",
       "Add authentication flow",
-      expectedPRBody(),
+      expect.stringContaining(expectedPRBody()),
     );
 
     expect(mockRenderPRCreated).toHaveBeenCalledWith(
@@ -390,7 +393,7 @@ describe("PR flow integration", () => {
     expect(mockUpdatePullRequestFromCurrentBranch).toHaveBeenCalledWith(
       "main",
       "Add authentication flow",
-      expectedPRBody(),
+      expect.stringContaining(expectedPRBody()),
     );
 
     expect(mockRenderPRUpdated).toHaveBeenCalledWith(

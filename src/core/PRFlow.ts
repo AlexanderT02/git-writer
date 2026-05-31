@@ -9,6 +9,7 @@ import type { GitPRService } from "../git/GitPRService.js";
 import type { LLM } from "../llm/LLM.js";
 import type { UsageTracker } from "../stats/UsageTracker.js";
 import type {
+  BranchPRSummary,
   PRContext,
   PullRequestCreateResult,
   PullRequestUpdateResult,
@@ -45,9 +46,10 @@ export class PRFlow {
 
     await this.handleUnpushedCommitsWarning();
 
-    const baseSummaries = baseBranch
+    const baseSummariesRaw = baseBranch
       ? initialBaseSummaries
       : this.deps.gitPR.getAvailablePRBaseSummaries();
+    const baseSummaries = this.decorateBaseSummariesWithPRHints(baseSummariesRaw);
 
     const selectedBaseBranch =
       baseBranch ??
@@ -74,7 +76,11 @@ export class PRFlow {
       : await prGenerator.generate(prContext);
     const durationMs = Date.now() - startedAt;
 
-    const { title, description } = generatedPR;
+    const { title } = generatedPR;
+    const description = this.withContextHeadMarker(
+      generatedPR.description,
+      this.deps.gitPR.getCurrentHeadSha(),
+    );
 
     this.deps.tracker.record(
       this.deps.buildUsageEntry("pr", {
@@ -244,5 +250,52 @@ export class PRFlow {
   }): never {
     UI.renderPRFailure(result);
     throw new GracefulExit(1);
+  }
+
+  private withContextHeadMarker(body: string, headSha: string): string {
+    if (!headSha) return body;
+
+    const marker = `<!-- gw-context-head: ${headSha} -->`;
+    const regex = /<!--\s*gw-context-head:\s*[0-9a-f]{7,40}\s*-->/i;
+
+    if (regex.test(body)) {
+      return body.replace(regex, marker);
+    }
+
+    return `${body.trim()}\n\n${marker}`.trim();
+  }
+
+  private decorateBaseSummariesWithPRHints(
+    summaries: BranchPRSummary[],
+  ): BranchPRSummary[] {
+    return summaries.map((summary) => {
+      const existing = this.deps.githubCli.getExistingPullRequest(summary.branch);
+
+      if (!existing) {
+        return {
+          ...summary,
+          prActionHint: "create",
+          contextHint: "new PR",
+        };
+      }
+
+      const markerSha = existing.contextHeadSha;
+      const newerCommits = markerSha
+        ? this.deps.gitPR.countCommitsSince(markerSha)
+        : null;
+
+      const contextHint =
+        newerCommits === null
+          ? "context status unknown"
+          : newerCommits === 0
+            ? "context up-to-date"
+            : `${newerCommits} commit${newerCommits === 1 ? "" : "s"} not yet in PR context`;
+
+      return {
+        ...summary,
+        prActionHint: "update",
+        contextHint,
+      };
+    });
   }
 }

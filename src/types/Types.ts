@@ -103,6 +103,8 @@ export type BranchPRSummary = {
   files: number;
   insertions: number;
   deletions: number;
+  prActionHint?: "create" | "update";
+  contextHint?: string;
 };
 
 export type PullRequestCreateResult =
@@ -178,6 +180,7 @@ export type ExistingPullRequest = {
   url: string;
   title: string;
   body: string;
+  contextHeadSha?: string;
 };
 
 export interface CompactFileSummary {

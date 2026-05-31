@@ -180,4 +180,23 @@ export class GitPRService {
       maxBuffer: this.config.git.maxBufferBytes,
     });
   }
+
+  getCurrentHeadSha(): string {
+    return this.git.runGitOrEmpty(["rev-parse", "HEAD"]);
+  }
+
+  isAncestorCommit(sha: string): boolean {
+    if (!sha) return false;
+    const mergeBase = this.git.runGitOrEmpty(["merge-base", sha, "HEAD"]);
+    return Boolean(mergeBase) && mergeBase === sha;
+  }
+
+  countCommitsSince(sha: string): number | null {
+    if (!sha) return null;
+    if (!this.isAncestorCommit(sha)) return null;
+
+    const raw = this.git.runGitOrEmpty(["rev-list", "--count", `${sha}..HEAD`]);
+    const count = Number(raw);
+    return Number.isFinite(count) ? count : null;
+  }
 }
