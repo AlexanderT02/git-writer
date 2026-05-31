@@ -47,13 +47,13 @@ Your analysis must include:
 - Do not infer that tests were run unless the context proves it.
 
 ## Risks
-- Identify concrete risks, regressions, edge cases, or migration concerns.
-- Avoid vague risks unless no specific risk can be inferred.
-- If risk appears low, explain why briefly.
+- Identify only concrete high-signal risks: likely bugs/regressions, security concerns, data-loss risk, breaking behavior, or migration pitfalls.
+- If no concrete risk is visible, output exactly: "Risks: NONE".
+- Do not include generic or speculative risks.
 
 ## Review Notes
 - Mention anything reviewers should pay attention to.
-- Include naming, casing, API, config, or UX concerns if visible.
+- Include quick code-review flags when visible: potential bug paths, missing guards/validation, unsafe assumptions, auth/permission/security concerns, and risky API/config changes.
 
 Rules:
 - Do not invent files, tests, commands, issues, or behavior.
@@ -91,6 +91,14 @@ BODY:
 ## Risks
 - <specific risk, edge case, breaking change, or "Low risk; changes are isolated">
 
+<include this section only if clearly supported>
+## Breaking Changes
+- <exact API/config/schema/contract change and migration note>
+
+<include this section only if reviewer focus areas are clearly supported>
+## Review Focus
+- <specific high-impact area to review (e.g. auth edge case, migration path, validation guard)>
+
 Rules:
 - Do not add text before TITLE:
 - Do not use "# PR Title"
@@ -106,7 +114,13 @@ Rules:
 - If no testing evidence exists, omit ## Testing entirely
 - Mention breaking changes only if clearly supported
 - Prefer 2-4 bullets in Changes
-- Prefer 1-3 bullets in Risks
+- Include ## Risks only when the analysis contains concrete risks (bug, security, breaking behavior, migration/data risk)
+- Omit ## Risks entirely when analysis says "Risks: NONE" or no concrete risk is present
+- If included, keep Risks concise and specific (1-3 bullets)
+- Include ## Breaking Changes only when explicitly supported by context; otherwise omit
+- Include ## Review Focus only when specific high-impact review targets are visible; otherwise omit
+- Keep only high-signal sections backed by evidence; if a section is not supported, omit it
+- Never speculate. If evidence is missing, leave it out.
 - Keep the title action-oriented
 
 Analysis:
