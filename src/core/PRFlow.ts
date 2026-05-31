@@ -9,11 +9,13 @@ import type { GitPRService } from "../git/GitPRService.js";
 import type { LLM } from "../llm/LLM.js";
 import type { UsageTracker } from "../stats/UsageTracker.js";
 import type {
+  BranchPRSummary,
   PRContext,
   PullRequestCreateResult,
   PullRequestUpdateResult,
 } from "../types/Types.js";
 import { UI } from "../ui/UI.js";
+import type { PRContextStateStore } from "../pr/PRContextStateStore.js";
 import type { UsageEntryBuilder } from "./App.js";
 
 export class PRFlow {
@@ -26,6 +28,7 @@ export class PRFlow {
       tracker: UsageTracker;
       buildUsageEntry: UsageEntryBuilder;
       config: AppConfig;
+      prContextState: PRContextStateStore;
     },
   ) {}
 
@@ -45,9 +48,10 @@ export class PRFlow {
 
     await this.handleUnpushedCommitsWarning();
 
-    const baseSummaries = baseBranch
+    const baseSummariesRaw = baseBranch
       ? initialBaseSummaries
       : this.deps.gitPR.getAvailablePRBaseSummaries();
+    const baseSummaries = this.decorateBaseSummariesWithPRHints(baseSummariesRaw);
 
     const selectedBaseBranch =
       baseBranch ??
@@ -109,6 +113,9 @@ export class PRFlow {
             title,
             description,
           );
+        if (result.status === "created") {
+          this.persistPRContextHead(selectedBaseBranch, result.url);
+        }
 
         this.handleCreatePRResult(result);
       }
@@ -120,6 +127,9 @@ export class PRFlow {
             title,
             description,
           );
+        if (result.status === "updated") {
+          this.persistPRContextHead(selectedBaseBranch, result.url);
+        }
 
         this.handleUpdatePRResult(result);
       }
@@ -244,5 +254,58 @@ export class PRFlow {
   }): never {
     UI.renderPRFailure(result);
     throw new GracefulExit(1);
+  }
+
+  private decorateBaseSummariesWithPRHints(
+    summaries: BranchPRSummary[],
+  ): BranchPRSummary[] {
+    const currentBranch = this.deps.gitPR.getCurrentBranch();
+
+    return summaries.map((summary) => {
+      const existing = this.deps.githubCli.getExistingPullRequest(summary.branch);
+
+      if (!existing) {
+        return {
+          ...summary,
+          prActionHint: "create",
+          contextHint: "new PR",
+        };
+      }
+
+      const trackedHeadSha = this.deps.prContextState.getHeadSha(
+        currentBranch,
+        summary.branch,
+      );
+      const newerCommits = trackedHeadSha
+        ? this.deps.gitPR.countCommitsSince(trackedHeadSha)
+        : null;
+
+      const contextHint =
+        newerCommits === null
+          ? "context status unknown"
+          : newerCommits === 0
+            ? "context up-to-date"
+            : `${newerCommits} commit${newerCommits === 1 ? "" : "s"} not yet in PR context`;
+
+      return {
+        ...summary,
+        prActionHint: "update",
+        contextHint,
+      };
+    });
+  }
+
+  private persistPRContextHead(baseBranch: string, prUrl?: string): void {
+    const headSha = this.deps.gitPR.getCurrentHeadSha();
+    const currentBranch = this.deps.gitPR.getCurrentBranch();
+
+    if (!headSha || !currentBranch) return;
+
+    this.deps.prContextState.setHeadSha(
+      currentBranch,
+      baseBranch,
+      headSha,
+      prUrl,
+    );
   }
 }

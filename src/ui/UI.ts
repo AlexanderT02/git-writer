@@ -248,7 +248,11 @@ export class UI {
             " " +
             chalk.red(`-${branch.deletions}`) +
             ")",
-          ),
+          ) +
+          (branch.prActionHint
+            ? ` ${chalk.cyan(`[${branch.prActionHint === "update" ? "update existing PR" : "create new PR"}]`)}`
+            : "") +
+          (branch.contextHint ? ` ${chalk.gray(`(${branch.contextHint})`)}` : ""),
         value: branch.branch,
       })),
     });

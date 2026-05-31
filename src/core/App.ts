@@ -12,6 +12,7 @@ import type { PRContext, UsageEntry } from "../types/Types.js";
 import { GitPRService } from "../git/GitPRService.js";
 import { GitHubCLIService } from "../git/GitHubCliService.js";
 import { UsageTracker } from "../stats/UsageTracker.js";
+import { PRContextStateStore } from "../pr/PRContextStateStore.js";
 
 import { CommitFlow } from "./CommitFlow.js";
 import { PRFlow } from "./PRFlow.js";
@@ -62,6 +63,7 @@ export class App {
   private readonly gitPR: GitPRService;
   private readonly githubCli: GitHubCLIService;
   private readonly tracker: UsageTracker;
+  private readonly prContextState: PRContextStateStore;
   private readonly commitFlow: CommitFlow;
   private readonly prFlow: PRFlow;
 
@@ -95,6 +97,7 @@ export class App {
     this.gitPR = new GitPRService(this.git, config);
     this.githubCli = new GitHubCLIService(this.git);
     this.tracker = new UsageTracker();
+    this.prContextState = new PRContextStateStore();
 
     const buildUsageEntry: UsageEntryBuilder = this.buildUsageEntry.bind(this);
 
@@ -116,6 +119,7 @@ export class App {
       tracker: this.tracker,
       buildUsageEntry,
       config,
+      prContextState: this.prContextState,
     });
   }
 
