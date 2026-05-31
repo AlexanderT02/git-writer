@@ -2,6 +2,7 @@ import type { LLMProviderConfig, LLMProviderName } from "../config/Config.js";
 import { config } from "../config/Config.js";
 import { CommitGenerator } from "../generation/CommitGenerator.js";
 import { CommitContextBuilder } from "../context/CommitContextBuilder.js";
+import type { CommitContextMode } from "../context/CommitContextBuilder.js";
 import { PRContextBuilder } from "../context/PRContextBuilder.js";
 import { GitService } from "../git/GitService.js";
 import { createLLMProvider } from "../llm/Factory.js";
@@ -69,6 +70,7 @@ export class App {
     issueRefs: string[] = [],
     providerOverride?: LLMProviderName,
     forceMode = false,
+    commitContextMode: CommitContextMode = "small",
   ) {
     this.fastMode = fastMode;
     this.forceMode = forceMode;
@@ -83,7 +85,11 @@ export class App {
     this.git = new GitService(config);
     this.ai = createLLMProvider(config, this.providerName);
     this.staging = new StagingService(this.git, config);
-    this.commitContext = new CommitContextBuilder(this.git, config);
+    this.commitContext = new CommitContextBuilder(
+      this.git,
+      config,
+      commitContextMode,
+    );
     this.prContext = new PRContextBuilder(this.git, config);
     this.commitGenerator = new CommitGenerator(this.ai, config);
     this.gitPR = new GitPRService(this.git, config);

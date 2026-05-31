@@ -8,7 +8,11 @@ import type { GitHubCLIService } from "../git/GitHubCliService.js";
 import type { GitPRService } from "../git/GitPRService.js";
 import type { LLM } from "../llm/LLM.js";
 import type { UsageTracker } from "../stats/UsageTracker.js";
-import type { PRContext, PullRequestCreateResult } from "../types/Types.js";
+import type {
+  PRContext,
+  PullRequestCreateResult,
+  PullRequestUpdateResult,
+} from "../types/Types.js";
 import { UI } from "../ui/UI.js";
 import type { UsageEntryBuilder } from "./App.js";
 
@@ -54,11 +58,20 @@ export class PRFlow {
       throw new GracefulExit(1);
     }
 
-    const prContext = this.buildContext(selectedBaseBranch);
+    const existingPullRequest =
+      this.deps.githubCli.getExistingPullRequest(selectedBaseBranch);
+    const prContext = existingPullRequest
+      ? this.deps.prContext.buildIncremental(selectedBaseBranch)
+      : this.buildContext(selectedBaseBranch);
     const prGenerator = new PRGenerator(this.deps.ai, this.deps.config);
 
     const startedAt = Date.now();
-    const generatedPR = await prGenerator.generate(prContext);
+    const generatedPR = existingPullRequest
+      ? await prGenerator.generateFromExisting(prContext, {
+        title: existingPullRequest.title,
+        body: existingPullRequest.body,
+      })
+      : await prGenerator.generate(prContext);
     const durationMs = Date.now() - startedAt;
 
     const { title, description } = generatedPR;
@@ -77,7 +90,9 @@ export class PRFlow {
     while (true) {
       UI.renderPRPreview(selectedBaseBranch, title, description);
 
-      const action = await UI.prActionMenu();
+      const action = await UI.prActionMenu({
+        hasExistingPR: Boolean(existingPullRequest),
+      });
 
       if (action === "copy") {
         await clipboard.write(`${title}\n\n${description}`);
@@ -96,6 +111,17 @@ export class PRFlow {
           );
 
         this.handleCreatePRResult(result);
+      }
+
+      if (action === "update") {
+        const result =
+          this.deps.githubCli.updatePullRequestFromCurrentBranch(
+            selectedBaseBranch,
+            title,
+            description,
+          );
+
+        this.handleUpdatePRResult(result);
       }
 
       if (action === "cancel") {
@@ -188,6 +214,26 @@ export class PRFlow {
           message: result.message ?? "Failed to create pull request.",
           suggestedCommand:
           "suggestedCommand" in result ? result.suggestedCommand : undefined,
+        });
+    }
+  }
+
+  private handleUpdatePRResult(result: PullRequestUpdateResult): never {
+    switch (result.status) {
+      case "updated":
+        UI.renderPRUpdated(result.url);
+        throw new GracefulExit(0);
+
+      case "not_found":
+      case "not_pushed":
+      case "unpushed_commits":
+      case "gh_unauthenticated":
+      case "gh_missing":
+      case "failed":
+        this.renderPRFailure({
+          message: result.message ?? "Failed to update pull request.",
+          suggestedCommand:
+            "suggestedCommand" in result ? result.suggestedCommand : undefined,
         });
     }
   }

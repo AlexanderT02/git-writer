@@ -180,7 +180,7 @@ describe("CLI commands", () => {
       await runCommand(["commit"]);
 
       expect(mockGetCurrentProvider).toHaveBeenCalledTimes(1);
-      expect(App).toHaveBeenCalledWith(false, [], "openai");
+      expect(App).toHaveBeenCalledWith(false, [], "openai", false, "small");
       expect(mockRunCommitInteractive).toHaveBeenCalledTimes(1);
     });
 
@@ -190,7 +190,7 @@ describe("CLI commands", () => {
       await runCommand(["c"]);
 
       expect(mockGetCurrentProvider).toHaveBeenCalledTimes(1);
-      expect(App).toHaveBeenCalledWith(false, [], "openai");
+      expect(App).toHaveBeenCalledWith(false, [], "openai", false, "small");
       expect(mockRunCommitInteractive).toHaveBeenCalledTimes(1);
     });
 
@@ -199,8 +199,43 @@ describe("CLI commands", () => {
 
       await runCommand(["commit", "123", "   ", "456"]);
 
-      expect(App).toHaveBeenCalledWith(false, ["123", "456"], "openai");
+      expect(App).toHaveBeenCalledWith(
+        false,
+        ["123", "456"],
+        "openai",
+        false,
+        "small",
+      );
       expect(mockRunCommitInteractive).toHaveBeenCalledTimes(1);
+    });
+
+    it("passes commit context mode with --ctx small", async () => {
+      const { App } = await import("../../src/core/App.js");
+
+      await runCommand(["commit", "--ctx", "small"]);
+
+      expect(App).toHaveBeenCalledWith(false, [], "openai", false, "small");
+      expect(mockRunCommitInteractive).toHaveBeenCalledTimes(1);
+    });
+
+    it("passes commit context mode with --ctx all", async () => {
+      const { App } = await import("../../src/core/App.js");
+
+      await runCommand(["commit", "--ctx", "all"]);
+
+      expect(App).toHaveBeenCalledWith(false, [], "openai", false, "all");
+      expect(mockRunCommitInteractive).toHaveBeenCalledTimes(1);
+    });
+
+    it("rejects invalid commit context mode", async () => {
+      const { error } = await expectCommandFailure([
+        "commit",
+        "--ctx",
+        "huge",
+      ]);
+
+      expect(error.message).toContain('process.exit unexpectedly called with "1"');
+      expect(mockRunCommitInteractive).not.toHaveBeenCalled();
     });
   });
 

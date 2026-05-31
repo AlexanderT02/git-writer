@@ -99,6 +99,30 @@ describe("PRGenerator", () => {
     });
   });
 
+  describe("generateFromExisting", () => {
+    it("uses existing PR title/body as update base", async () => {
+      const llm = createMockLLM({
+        complete: "TITLE:\nUpdated title\n\nBODY:\nUpdated body",
+      });
+      const gen = new PRGenerator(llm, createTestConfig());
+
+      const result = await gen.generateFromExisting(
+        makePRContext(),
+        {
+          title: "Old title",
+          body: "## Summary\nOld body",
+        },
+      );
+
+      expect(llm.complete).toHaveBeenCalledTimes(2);
+      expect(llm.complete.mock.calls[0]?.[0]).toContain("Existing PR title:");
+      expect(llm.complete.mock.calls[0]?.[0]).toContain("Old title");
+      expect(llm.complete.mock.calls[1]?.[0]).toContain("Existing body:");
+      expect(result.title).toBe("Updated title");
+      expect(result.description).toBe("Updated body");
+    });
+  });
+
   describe("parsePROutput", () => {
     it("parses standard TITLE/BODY format", () => {
       const gen = createGenerator();

@@ -81,6 +81,13 @@ gw commit
 gw c
 ```
 
+Tune commit context size:
+
+```bash
+gw c --ctx all
+gw c --ctx small
+```
+
 What happens:
 
 1. Select the files you want to commit.

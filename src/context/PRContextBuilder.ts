@@ -47,6 +47,30 @@ export class PRContextBuilder extends BaseContextBuilder {
     };
   }
 
+  buildIncremental(baseBranch: string = "origin/main", commitLimit = 8): PRContext {
+    this.currentBaseBranch = baseBranch;
+
+    const branchCtx = this.gitService.getCurrentBranchContext();
+
+    const commits = this.gitService.runGitOrEmpty([
+      "log",
+      "--right-only",
+      "--cherry-pick",
+      "--oneline",
+      "--no-merges",
+      `-n${Math.max(1, commitLimit)}`,
+      `${baseBranch}...HEAD`,
+    ]);
+
+    return {
+      branch: branchCtx.branch,
+      issue: branchCtx.issue,
+      commits,
+      diff: "",
+      fileContexts: "",
+    };
+  }
+
   buildFileContexts(baseBranch: string): PRFileContextResult[] {
     this.currentBaseBranch = baseBranch;
 

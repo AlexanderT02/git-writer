@@ -140,6 +140,46 @@ export type PullRequestCreateResult =
     message: string;
   };
 
+export type PullRequestUpdateResult =
+  | {
+    status: "updated";
+    url: string;
+    message: string;
+  }
+  | {
+    status: "not_found";
+    message: string;
+  }
+  | {
+    status: "not_pushed";
+    message: string;
+    suggestedCommand: string;
+  }
+  | {
+    status: "unpushed_commits";
+    message: string;
+    suggestedCommand: string;
+  }
+  | {
+    status: "gh_missing";
+    message: string;
+  }
+  | {
+    status: "gh_unauthenticated";
+    message: string;
+    suggestedCommand: string;
+  }
+  | {
+    status: "failed";
+    message: string;
+  };
+
+export type ExistingPullRequest = {
+  url: string;
+  title: string;
+  body: string;
+};
+
 export interface CompactFileSummary {
   path: string;
   status: string;
