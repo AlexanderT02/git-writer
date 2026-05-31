@@ -389,6 +389,28 @@ describe("PR flow integration", () => {
     );
   });
 
+  it("renders failure when update is selected but no existing PR is found", async () => {
+    const { App } = await import("../src/core/App.js");
+
+    mockPrActionMenu.mockResolvedValueOnce("update");
+    mockUpdatePullRequestFromCurrentBranch.mockReturnValueOnce({
+      status: "not_found",
+      message: "No existing pull request found for this branch.",
+    });
+
+    const app = new App(false, [], "openai");
+
+    await expect(app.runPRInteractive("main")).rejects.toMatchObject({
+      code: 1,
+    } satisfies Partial<GracefulExit>);
+
+    expect(mockUpdatePullRequestFromCurrentBranch).toHaveBeenCalledTimes(1);
+    expect(mockRenderPRFailure).toHaveBeenCalledWith({
+      message: "No existing pull request found for this branch.",
+      suggestedCommand: undefined,
+    });
+  });
+
   it("does not call the LLM when there are no PR changes against the base branch", async () => {
     const { App } = await import("../src/core/App.js");
 
