@@ -15,6 +15,7 @@ import type {
   PullRequestUpdateResult,
 } from "../types/Types.js";
 import { UI } from "../ui/UI.js";
+import type { PRContextStateStore } from "../pr/PRContextStateStore.js";
 import type { UsageEntryBuilder } from "./App.js";
 
 export class PRFlow {
@@ -27,6 +28,7 @@ export class PRFlow {
       tracker: UsageTracker;
       buildUsageEntry: UsageEntryBuilder;
       config: AppConfig;
+      prContextState: PRContextStateStore;
     },
   ) {}
 
@@ -76,11 +78,7 @@ export class PRFlow {
       : await prGenerator.generate(prContext);
     const durationMs = Date.now() - startedAt;
 
-    const { title } = generatedPR;
-    const description = this.withContextHeadMarker(
-      generatedPR.description,
-      this.deps.gitPR.getCurrentHeadSha(),
-    );
+    const { title, description } = generatedPR;
 
     this.deps.tracker.record(
       this.deps.buildUsageEntry("pr", {
@@ -115,6 +113,9 @@ export class PRFlow {
             title,
             description,
           );
+        if (result.status === "created") {
+          this.persistPRContextHead(selectedBaseBranch, result.url);
+        }
 
         this.handleCreatePRResult(result);
       }
@@ -126,6 +127,9 @@ export class PRFlow {
             title,
             description,
           );
+        if (result.status === "updated") {
+          this.persistPRContextHead(selectedBaseBranch, result.url);
+        }
 
         this.handleUpdatePRResult(result);
       }
@@ -252,22 +256,11 @@ export class PRFlow {
     throw new GracefulExit(1);
   }
 
-  private withContextHeadMarker(body: string, headSha: string): string {
-    if (!headSha) return body;
-
-    const marker = `<!-- gw-context-head: ${headSha} -->`;
-    const regex = /<!--\s*gw-context-head:\s*[0-9a-f]{7,40}\s*-->/i;
-
-    if (regex.test(body)) {
-      return body.replace(regex, marker);
-    }
-
-    return `${body.trim()}\n\n${marker}`.trim();
-  }
-
   private decorateBaseSummariesWithPRHints(
     summaries: BranchPRSummary[],
   ): BranchPRSummary[] {
+    const currentBranch = this.deps.gitPR.getCurrentBranch();
+
     return summaries.map((summary) => {
       const existing = this.deps.githubCli.getExistingPullRequest(summary.branch);
 
@@ -279,9 +272,12 @@ export class PRFlow {
         };
       }
 
-      const markerSha = existing.contextHeadSha;
-      const newerCommits = markerSha
-        ? this.deps.gitPR.countCommitsSince(markerSha)
+      const trackedHeadSha = this.deps.prContextState.getHeadSha(
+        currentBranch,
+        summary.branch,
+      );
+      const newerCommits = trackedHeadSha
+        ? this.deps.gitPR.countCommitsSince(trackedHeadSha)
         : null;
 
       const contextHint =
@@ -297,5 +293,19 @@ export class PRFlow {
         contextHint,
       };
     });
+  }
+
+  private persistPRContextHead(baseBranch: string, prUrl?: string): void {
+    const headSha = this.deps.gitPR.getCurrentHeadSha();
+    const currentBranch = this.deps.gitPR.getCurrentBranch();
+
+    if (!headSha || !currentBranch) return;
+
+    this.deps.prContextState.setHeadSha(
+      currentBranch,
+      baseBranch,
+      headSha,
+      prUrl,
+    );
   }
 }

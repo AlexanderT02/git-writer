@@ -185,6 +185,10 @@ export class GitPRService {
     return this.git.runGitOrEmpty(["rev-parse", "HEAD"]);
   }
 
+  getCurrentBranch(): string {
+    return this.git.getCurrentBranch();
+  }
+
   isAncestorCommit(sha: string): boolean {
     if (!sha) return false;
     const mergeBase = this.git.runGitOrEmpty(["merge-base", sha, "HEAD"]);

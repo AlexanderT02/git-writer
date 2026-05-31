@@ -338,7 +338,7 @@ describe("PR flow integration", () => {
     const copied = mockClipboardWrite.mock.calls[0]?.[0] as string;
     expect(copied).toContain("Add authentication flow");
     expect(copied).toContain(expectedPRBody());
-    expect(copied).toMatch(/<!--\s*gw-context-head:\s*[0-9a-f]{7,40}\s*-->/i);
+    expect(copied).toBe(expectedClipboardMarkdown());
 
     expect(mockRenderCopied).toHaveBeenCalledWith("Copied PR to clipboard");
   });

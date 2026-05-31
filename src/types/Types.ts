@@ -180,7 +180,6 @@ export type ExistingPullRequest = {
   url: string;
   title: string;
   body: string;
-  contextHeadSha?: string;
 };
 
 export interface CompactFileSummary {
