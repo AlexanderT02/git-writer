@@ -10,6 +10,7 @@ import { GracefulExit } from "./Errors.js";
 import { StatsRenderer } from "./stats/StatsRenderer.js";
 import { ProviderSettings } from "./llm/ProviderSettings.js";
 import type { LLMProviderName } from "./config/Config.js";
+import type { CommitContextMode } from "./context/CommitContextBuilder.js";
 import { realpathSync } from "fs";
 import { createRequire } from "module";
 
@@ -19,6 +20,7 @@ type StatsOptions = {
 
 type CommitOptions = {
   force?: boolean;
+  ctx?: CommitContextMode;
 };
 
 type PROptions = {
@@ -90,6 +92,18 @@ function normalizeIssues(issues: string[]): string[] {
     .filter(Boolean);
 }
 
+function validateCommitContextMode(value: string): CommitContextMode {
+  const trimmed = value.trim().toLowerCase();
+
+  if (trimmed === "small" || trimmed === "all") {
+    return trimmed;
+  }
+
+  throw new InvalidArgumentError(
+    `Invalid commit context "${value}". Expected: small or all.`,
+  );
+}
+
 async function runCommit(
   issues: string[],
   options: CommitOptions,
@@ -97,7 +111,13 @@ async function runCommit(
   assertGitReady();
 
   const provider = new ProviderSettings().getCurrentProvider();
-  const app = new App(Boolean(options.force), normalizeIssues(issues), provider);
+  const app = new App(
+    Boolean(options.force),
+    normalizeIssues(issues),
+    provider,
+    false,
+    options.ctx ?? "small",
+  );
 
   await app.runCommitInteractive();
 }
@@ -147,6 +167,12 @@ export function createProgram(): Command {
     .command("commit")
     .alias("c")
     .description("Generate and create an AI-assisted commit")
+    .option(
+      "--ctx <mode>",
+      "Commit context size: small or all (default: small)",
+      validateCommitContextMode,
+      "small",
+    )
     .argument("[issues...]", "Issue references, e.g. 123 456")
     .action(async (issues: string[], options: CommitOptions) => {
       await runCommit(issues, options);

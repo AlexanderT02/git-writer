@@ -10,12 +10,19 @@ import {
   type ChangeSize,
 } from "./BaseContextBuilder.js";
 
+export type CommitContextMode = "small" | "all";
+
 export class CommitContextBuilder extends BaseContextBuilder {
   constructor(
     gitService: GitService,
     config: AppConfig,
+    private readonly contextMode: CommitContextMode = "all",
   ) {
     super(gitService, config);
+  }
+
+  private getCommitBudgetMultiplier(): number {
+    return this.contextMode === "small" ? 1 : 2;
   }
 
   build(files: string): CommitContext {
@@ -61,8 +68,8 @@ export class CommitContextBuilder extends BaseContextBuilder {
 
   buildFileContexts(): FileContextResult[] {
     const staged = this.prioritizeEntries(this.getStagedEntries());
-    // Give commit generation more room so output quality is closer to PR flow.
-    let remaining = this.getBudget(2);
+    const budgetMultiplier = this.getCommitBudgetMultiplier();
+    let remaining = this.getBudget(budgetMultiplier);
     const results: FileContextResult[] = [];
 
     for (const entry of staged) {
@@ -73,7 +80,7 @@ export class CommitContextBuilder extends BaseContextBuilder {
 
       const perFileBudget = Math.min(
         remaining,
-        this.getPerFileBudget(staged.length, this.getBudget(2)),
+        this.getPerFileBudget(staged.length, this.getBudget(budgetMultiplier)),
       );
 
       const result = this.buildSingleFileContext(entry, perFileBudget);
