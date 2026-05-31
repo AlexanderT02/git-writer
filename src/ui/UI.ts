@@ -185,13 +185,25 @@ export class UI {
     });
   }
 
-  static async prActionMenu(): Promise<"copy" | "create" | "update" | "cancel"> {
+  static async prActionMenu(
+    options: { hasExistingPR?: boolean } = {},
+  ): Promise<"copy" | "create" | "update" | "cancel"> {
+    const hasExistingPR = Boolean(options.hasExistingPR);
+
+    const actionChoices = hasExistingPR
+      ? [
+        { name: "Copy PR to clipboard", value: "copy" as const },
+        { name: "Update existing PR via GitHub CLI", value: "update" as const },
+      ]
+      : [
+        { name: "Copy PR to clipboard", value: "copy" as const },
+        { name: "Create PR via GitHub CLI", value: "create" as const },
+      ];
+
     return select<"copy" | "create" | "update" | "cancel">({
       message: "Choose an action for this PR:",
       choices: [
-        { name: "Copy PR to clipboard", value: "copy" },
-        { name: "Create PR via GitHub CLI", value: "create" },
-        { name: "Update existing PR via GitHub CLI", value: "update" },
+        ...actionChoices,
         new Separator(),
         { name: "Cancel", value: "cancel" },
       ],

@@ -398,6 +398,27 @@ describe("PR flow integration", () => {
     );
   });
 
+  it("opens PR action menu in existing-PR mode when PR already exists", async () => {
+    const { App } = await import("../src/core/App.js");
+
+    mockGetExistingPullRequest.mockReturnValueOnce({
+      url: "https://github.com/example/repo/pull/1",
+      title: "Existing title",
+      body: "## Summary\nExisting body",
+    });
+    mockPrActionMenu.mockResolvedValueOnce("cancel");
+
+    const app = new App(false, [], "openai");
+
+    await expect(app.runPRInteractive("main")).rejects.toBeInstanceOf(
+      UserCancelledError,
+    );
+
+    expect(mockPrActionMenu).toHaveBeenCalledWith({
+      hasExistingPR: true,
+    });
+  });
+
   it("renders failure when update is selected but no existing PR is found", async () => {
     const { App } = await import("../src/core/App.js");
 

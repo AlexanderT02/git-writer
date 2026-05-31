@@ -58,10 +58,12 @@ export class PRFlow {
       throw new GracefulExit(1);
     }
 
-    const prContext = this.buildContext(selectedBaseBranch);
-    const prGenerator = new PRGenerator(this.deps.ai, this.deps.config);
     const existingPullRequest =
       this.deps.githubCli.getExistingPullRequest(selectedBaseBranch);
+    const prContext = existingPullRequest
+      ? this.deps.prContext.buildIncremental(selectedBaseBranch)
+      : this.buildContext(selectedBaseBranch);
+    const prGenerator = new PRGenerator(this.deps.ai, this.deps.config);
 
     const startedAt = Date.now();
     const generatedPR = existingPullRequest
@@ -88,7 +90,9 @@ export class PRFlow {
     while (true) {
       UI.renderPRPreview(selectedBaseBranch, title, description);
 
-      const action = await UI.prActionMenu();
+      const action = await UI.prActionMenu({
+        hasExistingPR: Boolean(existingPullRequest),
+      });
 
       if (action === "copy") {
         await clipboard.write(`${title}\n\n${description}`);
