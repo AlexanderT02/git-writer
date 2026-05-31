@@ -102,8 +102,8 @@ export const config: AppConfig = {
 
   // Git limits used while collecting repository metadata and diff context.
   git: {
-    recentCommitCount: 8,
-    recentStyleCommitCount: 12,
+    recentCommitCount: 12,
+    recentStyleCommitCount: 20,
     largeDiffLineLimit: 800,
     largeDiffHeaderLimit: 150,
     maxRecentScopes: 10,
@@ -114,7 +114,7 @@ export const config: AppConfig = {
 
   // Controls how much file content is sent to the LLM.
   context: {
-    tokenBudget: 50_000,
+    tokenBudget: 75_000,
     smallFileThreshold: 3_000,
     contextLines: 30,
     maxFileBufferBytes: 10 * 1024 * 1024,
@@ -143,7 +143,7 @@ export const config: AppConfig = {
   // Commit message output constraints.
   commit: {
     summaryMaxLength: 72,
-    reasoningDiffPreviewLines: 80,
+    reasoningDiffPreviewLines: 140,
     preferredBulletCount: 2,
     maxBulletCount: 3,
   },

@@ -61,7 +61,8 @@ export class CommitContextBuilder extends BaseContextBuilder {
 
   buildFileContexts(): FileContextResult[] {
     const staged = this.prioritizeEntries(this.getStagedEntries());
-    let remaining = this.getBudget(1);
+    // Give commit generation more room so output quality is closer to PR flow.
+    let remaining = this.getBudget(2);
     const results: FileContextResult[] = [];
 
     for (const entry of staged) {
@@ -72,7 +73,7 @@ export class CommitContextBuilder extends BaseContextBuilder {
 
       const perFileBudget = Math.min(
         remaining,
-        this.getPerFileBudget(staged.length, this.getBudget(1)),
+        this.getPerFileBudget(staged.length, this.getBudget(2)),
       );
 
       const result = this.buildSingleFileContext(entry, perFileBudget);
