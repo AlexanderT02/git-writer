@@ -1,6 +1,9 @@
 import { spawnSync } from "child_process";
 import type { GitService } from "./GitService.js";
-import type { PullRequestCreateResult } from "../types/Types.js";
+import type {
+  PullRequestCreateResult,
+  PullRequestUpdateResult,
+} from "../types/Types.js";
 export type CommandResult = {
   status: number | null;
   stdout: string;
@@ -201,6 +204,68 @@ export class GitHubCLIService {
     return {
       status: "failed",
       message: combinedOutput || "Failed to create pull request via GitHub CLI.",
+    };
+  }
+
+  updatePullRequestFromCurrentBranch(
+    baseBranch: string,
+    title: string,
+    body: string,
+  ): PullRequestUpdateResult {
+    const readinessError = this.getReadinessError();
+
+    if (readinessError) {
+      return readinessError;
+    }
+
+    const upstreamError = this.getCurrentBranchUpstreamError();
+
+    if (upstreamError) {
+      return upstreamError;
+    }
+
+    const existingPrUrl = this.getExistingPullRequestUrl(baseBranch);
+
+    if (!existingPrUrl) {
+      return {
+        status: "not_found",
+        message:
+          "No existing pull request found for the current branch and selected base branch.",
+      };
+    }
+
+    const result = this.run("gh", [
+      "pr",
+      "edit",
+      existingPrUrl,
+      "--title",
+      title,
+      "--body",
+      body,
+    ]);
+
+    if (result.status === 0) {
+      return {
+        status: "updated",
+        url: existingPrUrl,
+        message: "Pull request updated successfully.",
+      };
+    }
+
+    const combinedOutput = [result.stderr, result.stdout]
+      .filter(Boolean)
+      .join("\n");
+
+    if (/not found|no pull requests found/i.test(combinedOutput)) {
+      return {
+        status: "not_found",
+        message: combinedOutput,
+      };
+    }
+
+    return {
+      status: "failed",
+      message: combinedOutput || "Failed to update pull request via GitHub CLI.",
     };
   }
 }

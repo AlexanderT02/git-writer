@@ -56,6 +56,18 @@ type CreatePullRequestResult =
       suggestedCommand?: string;
     };
 
+type UpdatePullRequestResult =
+  | {
+      status: "updated";
+      url: string;
+      message?: string;
+    }
+  | {
+      status: "not_found" | "not_pushed" | "unpushed_commits" | "gh_unauthenticated" | "gh_missing" | "failed";
+      message?: string;
+      suggestedCommand?: string;
+    };
+
 type UnpushedCommitsInfo = {
   hasUpstream: boolean;
   branch: string;
@@ -84,7 +96,15 @@ type CreatePullRequestMock = Mock<
   ) => CreatePullRequestResult
 >;
 
-type PrActionMenuMock = Mock<() => Promise<"copy" | "create" | "cancel">>;
+type UpdatePullRequestMock = Mock<
+  (
+    baseBranch: string,
+    title: string,
+    body: string,
+  ) => UpdatePullRequestResult
+>;
+
+type PrActionMenuMock = Mock<() => Promise<"copy" | "create" | "update" | "cancel">>;
 
 type UnpushedCommitsWarningMenuMock = Mock<
   (info: UnpushedCommitsInfo) => Promise<"push" | "continue" | "cancel">
@@ -110,6 +130,13 @@ const mockCreatePullRequestFromCurrentBranch = vi.fn(
   }),
 ) as CreatePullRequestMock;
 
+const mockUpdatePullRequestFromCurrentBranch = vi.fn(
+  (_baseBranch: string, _title: string, _body: string) => ({
+    status: "updated",
+    url: "https://github.com/example/repo/pull/1",
+  }),
+) as UpdatePullRequestMock;
+
 const mockPrActionMenu = vi.fn(
   async () => "copy" as const,
 ) as PrActionMenuMock;
@@ -122,6 +149,7 @@ const mockSelectBranch = vi.fn();
 
 const mockRenderPRPreview = vi.fn();
 const mockRenderPRCreated = vi.fn();
+const mockRenderPRUpdated = vi.fn();
 const mockRenderCopied = vi.fn();
 const mockRenderCancelled = vi.fn();
 const mockRenderPullRequestAlreadyExists = vi.fn();
@@ -142,6 +170,7 @@ vi.mock("../src/git/GitHubCliService.js", () => ({
   GitHubCLIService: vi.fn().mockImplementation(() => ({
     getPreflightError: mockGetPreflightError,
     createPullRequestFromCurrentBranch: mockCreatePullRequestFromCurrentBranch,
+    updatePullRequestFromCurrentBranch: mockUpdatePullRequestFromCurrentBranch,
   })),
 }));
 
@@ -153,6 +182,7 @@ vi.mock("../src/ui/UI.js", () => ({
 
     renderPRPreview: mockRenderPRPreview,
     renderPRCreated: mockRenderPRCreated,
+    renderPRUpdated: mockRenderPRUpdated,
     renderCopied: mockRenderCopied,
     renderCancelled: mockRenderCancelled,
     renderPullRequestAlreadyExists: mockRenderPullRequestAlreadyExists,
@@ -209,12 +239,14 @@ describe("PR flow integration", () => {
     mockClipboardWrite.mockReset();
     mockGetPreflightError.mockReset();
     mockCreatePullRequestFromCurrentBranch.mockReset();
+    mockUpdatePullRequestFromCurrentBranch.mockReset();
     mockPrActionMenu.mockReset();
     mockUnpushedCommitsWarningMenu.mockReset();
     mockSelectBranch.mockReset();
 
     mockRenderPRPreview.mockReset();
     mockRenderPRCreated.mockReset();
+    mockRenderPRUpdated.mockReset();
     mockRenderCopied.mockReset();
     mockRenderCancelled.mockReset();
     mockRenderPullRequestAlreadyExists.mockReset();
@@ -225,6 +257,11 @@ describe("PR flow integration", () => {
 
     mockCreatePullRequestFromCurrentBranch.mockReturnValue({
       status: "created",
+      url: "https://github.com/example/repo/pull/1",
+    });
+
+    mockUpdatePullRequestFromCurrentBranch.mockReturnValue({
+      status: "updated",
       url: "https://github.com/example/repo/pull/1",
     });
 
@@ -320,6 +357,34 @@ describe("PR flow integration", () => {
     );
 
     expect(mockRenderPRCreated).toHaveBeenCalledWith(
+      "https://github.com/example/repo/pull/1",
+    );
+  });
+
+  it("updates an existing pull request through the GitHub CLI service when update is selected", async () => {
+    const { App } = await import("../src/core/App.js");
+
+    mockPrActionMenu.mockResolvedValueOnce("update");
+
+    const app = new App(false, [], "openai");
+
+    await expect(app.runPRInteractive("main")).rejects.toMatchObject({
+      code: 0,
+    } satisfies Partial<GracefulExit>);
+
+    expect(mockLLM.complete).toHaveBeenCalledTimes(2);
+    expect(mockClipboardWrite).not.toHaveBeenCalled();
+    expect(mockGetPreflightError).not.toHaveBeenCalled();
+    expect(mockCreatePullRequestFromCurrentBranch).not.toHaveBeenCalled();
+
+    expect(mockUpdatePullRequestFromCurrentBranch).toHaveBeenCalledTimes(1);
+    expect(mockUpdatePullRequestFromCurrentBranch).toHaveBeenCalledWith(
+      "main",
+      "Add authentication flow",
+      expectedPRBody(),
+    );
+
+    expect(mockRenderPRUpdated).toHaveBeenCalledWith(
       "https://github.com/example/repo/pull/1",
     );
   });

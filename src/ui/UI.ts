@@ -185,12 +185,13 @@ export class UI {
     });
   }
 
-  static async prActionMenu(): Promise<"copy" | "create" | "cancel"> {
-    return select<"copy" | "create" | "cancel">({
+  static async prActionMenu(): Promise<"copy" | "create" | "update" | "cancel"> {
+    return select<"copy" | "create" | "update" | "cancel">({
       message: "Choose an action for this PR:",
       choices: [
         { name: "Copy PR to clipboard", value: "copy" },
         { name: "Create PR via GitHub CLI", value: "create" },
+        { name: "Update existing PR via GitHub CLI", value: "update" },
         new Separator(),
         { name: "Cancel", value: "cancel" },
       ],
@@ -243,6 +244,15 @@ export class UI {
 
   static renderPRCreated(url: string): void {
     console.log(chalk.green("\n✔ Pull request created\n"));
+
+    if (url) {
+      console.log(chalk.cyan(url));
+      console.log("");
+    }
+  }
+
+  static renderPRUpdated(url: string): void {
+    console.log(chalk.green("\n✔ Pull request updated\n"));
 
     if (url) {
       console.log(chalk.cyan(url));

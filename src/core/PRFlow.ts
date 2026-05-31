@@ -8,7 +8,11 @@ import type { GitHubCLIService } from "../git/GitHubCliService.js";
 import type { GitPRService } from "../git/GitPRService.js";
 import type { LLM } from "../llm/LLM.js";
 import type { UsageTracker } from "../stats/UsageTracker.js";
-import type { PRContext, PullRequestCreateResult } from "../types/Types.js";
+import type {
+  PRContext,
+  PullRequestCreateResult,
+  PullRequestUpdateResult,
+} from "../types/Types.js";
 import { UI } from "../ui/UI.js";
 import type { UsageEntryBuilder } from "./App.js";
 
@@ -96,6 +100,17 @@ export class PRFlow {
           );
 
         this.handleCreatePRResult(result);
+      }
+
+      if (action === "update") {
+        const result =
+          this.deps.githubCli.updatePullRequestFromCurrentBranch(
+            selectedBaseBranch,
+            title,
+            description,
+          );
+
+        this.handleUpdatePRResult(result);
       }
 
       if (action === "cancel") {
@@ -188,6 +203,26 @@ export class PRFlow {
           message: result.message ?? "Failed to create pull request.",
           suggestedCommand:
           "suggestedCommand" in result ? result.suggestedCommand : undefined,
+        });
+    }
+  }
+
+  private handleUpdatePRResult(result: PullRequestUpdateResult): never {
+    switch (result.status) {
+      case "updated":
+        UI.renderPRUpdated(result.url);
+        throw new GracefulExit(0);
+
+      case "not_found":
+      case "not_pushed":
+      case "unpushed_commits":
+      case "gh_unauthenticated":
+      case "gh_missing":
+      case "failed":
+        this.renderPRFailure({
+          message: result.message ?? "Failed to update pull request.",
+          suggestedCommand:
+            "suggestedCommand" in result ? result.suggestedCommand : undefined,
         });
     }
   }
