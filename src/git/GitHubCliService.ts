@@ -107,36 +107,26 @@ export class GitHubCLIService {
   }
 
   getExistingPullRequestUrl(baseBranch: string): string | null {
-    const normalizedBaseBranch = this.normalizeBaseBranch(baseBranch);
-
-    const result = this.run("gh", [
-      "pr",
-      "view",
-      "--base",
-      normalizedBaseBranch,
-      "--json",
-      "url",
-      "--jq",
-      ".url",
-    ]);
-
-    if (result.status !== 0) {
-      return null;
-    }
-
-    return result.stdout || null;
+    return this.getExistingPullRequest(baseBranch)?.url ?? null;
   }
 
   getExistingPullRequest(baseBranch: string): ExistingPullRequest | null {
     const normalizedBaseBranch = this.normalizeBaseBranch(baseBranch);
+    const currentBranch = this.git.getCurrentBranch();
 
     const result = this.run("gh", [
       "pr",
-      "view",
+      "list",
+      "--state",
+      "open",
+      "--head",
+      currentBranch,
       "--base",
       normalizedBaseBranch,
       "--json",
       "url,title,body",
+      "--limit",
+      "1",
     ]);
 
     if (result.status !== 0 || !result.stdout) {
@@ -144,9 +134,10 @@ export class GitHubCLIService {
     }
 
     try {
-      const parsed = JSON.parse(result.stdout) as Partial<ExistingPullRequest>;
+      const parsedList = JSON.parse(result.stdout) as Array<Partial<ExistingPullRequest>>;
+      const parsed = parsedList[0];
 
-      if (!parsed.url || !parsed.title) {
+      if (!parsed || !parsed.url || !parsed.title) {
         return null;
       }
 
