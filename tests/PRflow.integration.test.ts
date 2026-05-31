@@ -6,6 +6,7 @@ import {
   readFileSync,
   existsSync,
   rmSync,
+  mkdirSync,
 } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -930,6 +931,72 @@ describe("PR flow integration", () => {
 
     expect(mockSelectBranch).toHaveBeenCalledTimes(1);
     expect(mockLLM.complete).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows update hint with pending context commits when existing PR state is behind", async () => {
+    const { App } = await import("../src/core/App.js");
+
+    const remote = createBareRemote(tempDirs);
+    git("remote", "add", "origin", remote);
+    git("checkout", "main");
+    git("push", "-u", "origin", "main");
+    git("checkout", "feature/auth");
+    git("push", "-u", "origin", "feature/auth");
+
+    const trackedHead = git("rev-parse", "HEAD");
+
+    writeFileSync("later.ts", "export const later = true;\n");
+    git("add", "later.ts");
+    git("commit", "-m", "feat: add later change");
+
+    const statePath = join(repo, ".git", "git-writer", "pr-context.json");
+    mkdirSync(join(repo, ".git", "git-writer"), { recursive: true });
+    writeFileSync(
+      statePath,
+      JSON.stringify(
+        {
+          "feature/auth::main": {
+            headSha: trackedHead,
+            updatedAt: new Date().toISOString(),
+            prUrl: "https://github.com/example/repo/pull/1",
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    mockGetExistingPullRequest.mockImplementation((baseBranch: string) => {
+      if (baseBranch === "origin/main") {
+        return {
+          url: "https://github.com/example/repo/pull/1",
+          title: "Existing title",
+          body: "## Summary\nExisting body",
+        };
+      }
+
+      return null;
+    });
+
+    mockSelectBranch.mockResolvedValueOnce("origin/main");
+    mockPrActionMenu.mockResolvedValueOnce("copy");
+
+    const app = new App(false, [], "openai");
+
+    await expect(app.runPRInteractive()).rejects.toMatchObject({
+      code: 0,
+    } satisfies Partial<GracefulExit>);
+
+    expect(mockSelectBranch).toHaveBeenCalledTimes(1);
+    const branchChoices = mockSelectBranch.mock.calls[0]?.[0] as Array<{
+      branch: string;
+      prActionHint?: string;
+      contextHint?: string;
+    }>;
+
+    const mainChoice = branchChoices.find((choice) => choice.branch === "origin/main");
+    expect(mainChoice?.prActionHint).toBe("update");
+    expect(mainChoice?.contextHint).toBe("1 commit not yet in PR context");
   });
 
   it("bubbles clipboard errors and does not create a PR", async () => {
