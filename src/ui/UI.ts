@@ -236,11 +236,17 @@ export class UI {
     branches: BranchPRSummary[],
     message: string,
   ): Promise<string> {
+    const actionBadge = (hint?: "create" | "update"): string => {
+      if (!hint) return "";
+      if (hint === "update") return chalk.yellow.bold("[UPDATE PR]");
+      return chalk.green.bold("[NEW PR]");
+    };
+
     return select<string>({
       message,
       choices: branches.map((branch) => ({
         name:
-          `${branch.branch} ` +
+          `${actionBadge(branch.prActionHint)} ${branch.branch} ` +
           chalk.dim(
             `(${branch.commits} commit${branch.commits !== 1 ? "s" : ""}, ` +
             `${branch.files} file${branch.files !== 1 ? "s" : ""}, ` +
@@ -249,10 +255,9 @@ export class UI {
             chalk.red(`-${branch.deletions}`) +
             ")",
           ) +
-          (branch.prActionHint
-            ? ` ${chalk.cyan(`[${branch.prActionHint === "update" ? "update existing PR" : "create new PR"}]`)}`
-            : "") +
-          (branch.contextHint ? ` ${chalk.gray(`(${branch.contextHint})`)}` : ""),
+          (branch.prActionHint === "update" && branch.contextHint
+            ? ` ${chalk.gray(`(${branch.contextHint})`)}`
+            : ""),
         value: branch.branch,
       })),
     });
