@@ -268,7 +268,7 @@ export class PRFlow {
         return {
           ...summary,
           prActionHint: "create",
-          contextHint: "new PR",
+          contextHint: "first PR against this base",
         };
       }
 
